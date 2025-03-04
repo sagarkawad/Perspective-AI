@@ -2,7 +2,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from app.scrapers.article_scraper import scrape_website
 from app.scrapers.clean_data import clean_scraped_data
-from app.services.summarization_service import summarize_text
+from app.services.summarization_service import summarization_and_return
 import json
 from app.services.counter_service import generate_opposite_perspective
 
@@ -34,7 +34,7 @@ async def scrape_article(article: ScrapURLRequest):
     # article.url is automatically validated as a non-null string
     data = scrape_website(article.url)
     clean = clean_scraped_data(data["scraped"])
-    summary = summarize_text({"inputs": f"{clean}"})
+    summary = summarization_and_return(clean)
 
     # Convert Python object to a JSON string(this will use double quotes)
     json_summary_string = json.dumps(summary)
