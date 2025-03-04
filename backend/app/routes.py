@@ -33,22 +33,13 @@ async def scrape_article(article: ScrapURLRequest):
 
     # article.url is automatically validated as a non-null string
     data = scrape_website(article.url)
-    # return {"data": data}
-    # print(data)
     clean = clean_scraped_data(data["scraped"])
-    # return {"clean": clean}
-    # print("clean:"+ clean)
-    #
-    #
     summary = summarize_text({"inputs": f"{clean}"})
-    return {"summary": summary}
-    # print(summary)
-    #
-    # # Convert Python object to a JSON string (this will use double quotes)
-    # json_summary_string = json.dumps(summary)
-    # print("summary"+json_summary_string)
-    #
-    # if not article.url:
-    #     raise HTTPException(status_code=422, detail="URL is required")
-    # # Process the URL (e.g., scrape the article)
-    # return {"summary":f"{json_summary_string}"}
+
+    # Convert Python object to a JSON string(this will use double quotes)
+    json_summary_string = json.dumps(summary)
+    print("summary"+json_summary_string)
+
+    if not article.url:
+        raise HTTPException(status_code=422, detail="URL is required")
+    return {"summary": f"{json_summary_string}"}
