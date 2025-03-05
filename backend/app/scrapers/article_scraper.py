@@ -21,4 +21,3 @@ def scrape_website(url, headers=None):
         print(f"Error: {e}")
         return None
 
-
