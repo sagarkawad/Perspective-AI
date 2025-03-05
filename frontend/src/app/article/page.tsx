@@ -200,7 +200,7 @@ export default function Article() {
                   </Typography>
                   <TextToSpeech text={perspective} />
 
-                  <ReactMarkdown>{perspective}</ReactMarkdown>
+                  <div>{perspective}</div>
                 </CardContent>
               </Card>
             )}
