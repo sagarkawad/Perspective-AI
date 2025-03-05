@@ -17,7 +17,6 @@ def generate_opposite_perspective(article_text):
         PERSPECTIVE_URL, headers=headers, json=json_prompt)
 
     result = response.json()[0]["generated_text"]
-    print(result)
     perspective_raw = result.split("[RESPONSE]")[-1].strip()
 
     if "Opposite Perspective:" in perspective_raw:
