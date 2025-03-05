@@ -1,13 +1,16 @@
 OPPOSITE_PERSPECTIVE_PROMPT = """
+[INSTRUCTIONS]
 You are a critical thinker who excels at presenting diverse perspectives. Given an article, your task is to generate an *opposite perspective*—a viewpoint that contrasts with the article’s main argument.
 
 Develop an Opposite Perspective
 Formulate a perspective that *directly contrasts* with the article’s viewpoint. This does not mean just arguing against it but presenting an alternative narrative, interpretation, or angle.
 
-
+[ARTICLE]
 News Article: 
 {article_text}
 
+[RESPONSE]
+Opposite Perspective:
 """
 
 

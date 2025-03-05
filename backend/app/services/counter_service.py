@@ -17,25 +17,13 @@ def generate_opposite_perspective(article_text):
         PERSPECTIVE_URL, headers=headers, json=json_prompt)
 
     result = response.json()[0]["generated_text"]
+    print(result)
+    perspective_raw = result.split("[RESPONSE]")[-1].strip()
 
-   # Convert the result to lowercase for case-insensitive checking
-    result_lower = result.lower()
-
-    # Check if "**opposite perspective:**" exists
-    if "**opposite perspective:**" in result_lower:
-        start_index = result.find("**OPPOSITE PERSPECTIVE:**")
-        if start_index != -1:
-            perspective = result[start_index:].strip()
+    if "Opposite Perspective:" in perspective_raw:
+        # format the response
+        perspective = perspective_raw.replace(
+            "Opposite Perspective:", "**Opposite Perspective:**\n")
     else:
-        # Check if "opposite perspective:" exists without **
-        if "opposite perspective:" in result_lower:
-            start_index = result_lower.find("opposite perspective:")
-            if start_index != -1:
-                # Add ** at the start and end of "OPPOSITE PERSPECTIVE:"
-                perspective = f"**OPPOSITE PERSPECTIVE:**\n{
-                    result[start_index + len('opposite perspective:'):].strip()}"
-        else:
-            # If "opposite perspective:" is not found, return the entire result
-            perspective = f"**OPPOSITE PERSPECTIVE:**\n{result.strip()}"
-
+        perspective = f"**Opposite Perspective**\n {perspective_raw}"
     return perspective
