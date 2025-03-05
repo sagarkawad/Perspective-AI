@@ -4,25 +4,36 @@ from dotenv import load_dotenv
 import os
 
 load_dotenv()
-hf_token = os.getenv("HF_TOKEN")
+API_KEY = os.getenv("API_KEY")
 
-PERSPECTIVE_URL = "https://api-inference.huggingface.co/models/mistralai/Mixtral-8x7B-Instruct-v0.1"
-headers = {"Authorization": f"Bearer {hf_token}"}
 
 
 def generate_opposite_perspective(article_text):
+    PERSPECTIVE_URL = "https://openrouter.ai/api/v1/chat/completions"
+    headers = {
+        "Authorization": f"Bearer {API_KEY}",
+        "Content-Type": "application/json"
+    }
+    
+   
     final_prompt = get_opposite_perspective_prompt(article_text)
-    json_prompt = {"inputs": final_prompt}
-    response = requests.post(
-        PERSPECTIVE_URL, headers=headers, json=json_prompt)
-
-    result = response.json()[0]["generated_text"]
-    perspective_raw = result.split("[RESPONSE]")[-1].strip()
-
-    if "Opposite Perspective:" in perspective_raw:
-        # format the response
-        perspective = perspective_raw.replace(
-            "Opposite Perspective:", "**Opposite Perspective:**\n")
+    payload = {
+        "model": "deepseek/deepseek-chat",
+        "messages": [
+            {
+                "role": "user", 
+                "content": final_prompt
+            }
+        ]
+    }
+    
+    response = requests.post(PERSPECTIVE_URL, headers=headers, json=payload)
+    result = response.json()['choices'][0]['message']['content']
+    
+   
+    if "Opposite Perspective:" in result:
+        perspective = result.split("Opposite Perspective:")[-1].strip()
     else:
-        perspective = f"**Opposite Perspective**\n {perspective_raw}"
+        perspective = result.strip()
+    
     return perspective

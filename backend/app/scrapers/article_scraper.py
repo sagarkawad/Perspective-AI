@@ -15,7 +15,7 @@ def scrape_website(url, headers=None):
         response.raise_for_status()  # Raise an error for bad responses (4xx, 5xx)
 
         soup = BeautifulSoup(response.content, 'html.parser')
-        return soup.get_text()  # Extract only readable text
+        return soup.get_text(separator=' ', strip=True)  # Extract only readable text
 
     except requests.exceptions.RequestException as e:
         print(f"Error: {e}")

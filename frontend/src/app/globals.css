@@ -110,3 +110,54 @@ body {
   }
 }
 
+/* frontend/src/globals.css */
+.sidebar {
+  width: 300px;
+  position: fixed;
+  top: 0;
+  right: -300px;
+  height: 100%;
+  background-color: #f4f4f4;
+  transition: right 0.3s ease;
+  overflow-y: auto;
+}
+
+.sidebar.expanded {
+  right: 0;
+}
+
+.sidebar button {
+  position: absolute;
+  top: 10px;
+  left: -50px;
+  transform: translateX(100%);
+  background-color: #007bff;
+  color: white;
+  border: none;
+  padding: 10px;
+  cursor: pointer;
+}
+
+.sidebar h3 {
+  margin: 10px 0;
+}
+
+.sidebar ul {
+  list-style: none;
+  padding: 0;
+}
+
+.sidebar li {
+  margin: 5px 0;
+}
+
+.sidebar a {
+  text-decoration: none;
+  color: #007bff;
+}
+
+.sidebar img {
+  width: 16px;
+  height: 16px;
+  margin-right: 5px;
+}

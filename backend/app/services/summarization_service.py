@@ -1,29 +1,55 @@
 import requests
-from dotenv import load_dotenv
 import os
+import json
+from dotenv import load_dotenv
 import logging
 
+
 load_dotenv()
-hf_token = os.getenv("HF_TOKEN")
-Summarization_URL = "https://api-inference.huggingface.co/models/google/bigbird-pegasus-large-arxiv"
-headers = {"Authorization": f"Bearer {hf_token}"}
-print(hf_token)
+openrouter_token = os.getenv("API_KEY")
+
+Summarization_URL = "https://openrouter.ai/api/v1/chat/completions"
+headers = {
+    "Authorization": f"Bearer {openrouter_token}",
+    "Content-Type": "application/json",
+}
 
 logger = logging.getLogger("uvicorn.error")
 
 
 def summarize_text(payload):
     try:
-        response = requests.post(
-            Summarization_URL, headers=headers, json=payload)
-
-        # Check if the response is empty or not successful.
+        openrouter_payload = json.dumps({
+            "model": "deepseek/deepseek-chat",
+            "messages": [
+                {
+                    "role": "system", 
+                    "content": "You are a helpful assistant that provides concise and accurate summaries."
+                },
+                {
+                    "role": "user", 
+                    "content": f"Please provide a concise summary of the following text:\n\n{payload['inputs']}"
+                }
+            ],
+        })
+        print(openrouter_payload)
+        print(openrouter_token)
+        
+        response = requests.post(Summarization_URL, headers=headers, data=openrouter_payload)
+        
+        print("Summarization API response status: %s", response.status_code)
+        print("Summarization API response text: %s", response.text)
+        
+     
         if response.status_code != 200 or not response.text:
-            raise Exception(f"Summarization API error, status code {
-                            response.status_code}")
-
-        summary = response.json()
+            raise Exception(f"Summarization API error, status code {response.status_code}")
+        
+      
+        summary_response = response.json()
+        summary = summary_response['choices'][0]['message']['content']
+        
         return summary
+    
+    
     except Exception as e:
         print("Error in summarization service: %s", e)
-        raise Exception("Error in summarization service: " + str(e))

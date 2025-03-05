@@ -7,9 +7,14 @@ import Navbar from "@/app/components/Navbar";
 import AnalyzeButton from "@/app/components/Utils/AnalyzeButton";
 import DescCard from "@/app/components/Utils/DescCard";
 
+
+
+
 export default function Home() {
   const [article_url,setArticleURL] = useState("")
   const router = useRouter();
+
+
 
   const handleSubmit = useCallback(() => {
     if (!article_url.trim()) return; // Prevents navigation if the input is empty
