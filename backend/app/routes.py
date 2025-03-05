@@ -4,7 +4,6 @@ from pydantic import BaseModel
 from app.scrapers.article_scraper import scrape_website
 from app.scrapers.clean_data import clean_scraped_data
 from app.services.summarization_service import summarize_text
-import json
 from app.services.counter_service import generate_opposite_perspective
 import logging
 
@@ -24,7 +23,6 @@ class ScrapURLRequest(BaseModel):
 def generate_ai_perspective(request: ArticleRequest):
     try:
         new_perspective = generate_opposite_perspective(request.summary)
-        # logger.info("Generated perspective: %s", new_perspective)
         return {"perspective": new_perspective}
     except Exception as e:
         logger.error("Error in generate-perspective: %s", e)
@@ -38,18 +36,14 @@ async def scrape_article(article: ScrapURLRequest):
         if not article.url:
             raise HTTPException(status_code=422, detail="URL is required")
 
-        # Scrape the website
-        # print(article.url)
         data = scrape_website(article.url)
         if data is None:
             logger.error("Scraped data is None for URL: %s", article.url)
             raise HTTPException(
                 status_code=500, detail="Error scraping the article. No data returned.")
-        # logger.info("Scraped data: %s", data)
 
         # Clean the data (make sure data is a string)
         clean = clean_scraped_data(data)
-        # print("Cleaned data: %s", clean)
 
         # Summarize the text
         summary = summarize_text({"inputs": clean})

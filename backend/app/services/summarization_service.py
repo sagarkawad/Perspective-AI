@@ -16,8 +16,6 @@ def summarize_text(payload):
     try:
         response = requests.post(
             Summarization_URL, headers=headers, json=payload)
-        # print("Summarization API response status: %s", response.status_code)
-        # print("Summarization API response text: %s", response.text)
 
         # Check if the response is empty or not successful.
         if response.status_code != 200 or not response.text:
