@@ -10,6 +10,7 @@ News Article:
 
 """
 
+
 def get_opposite_perspective_prompt(article_text: str) -> str:
     """
     Formats the prompt for generating an opposite perspective by injecting the provided article text.
