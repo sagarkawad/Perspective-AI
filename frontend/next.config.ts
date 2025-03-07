@@ -5,6 +5,7 @@ const nextConfig: NextConfig = {
     ignoreDuringBuilds: true, // Disable ESLint during builds
   },
   /* config options here */
+  output: "standalone", // Enable standalone output
 };
 
 export default nextConfig;
