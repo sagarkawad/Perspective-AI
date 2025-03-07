@@ -43,8 +43,7 @@ def summarize_text(payload):
         print("Summarization API response text: %s", response.text)
 
         if response.status_code != 200 or not response.text:
-            raise Exception(f"Summarization API error, status code {
-                            response.status_code}")
+            raise Exception("Summarization API error, status code")
 
         summary_response = response.json()
         summary = summary_response['choices'][0]['message']['content']
