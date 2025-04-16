@@ -24,8 +24,8 @@ export default function Home() {
   const handleSubmit = useCallback(() => {
     if (!article_url.trim()) return; // Prevents navigation if the input is empty
     const encodedURL = encodeURIComponent(article_url);
-    router.push(`/${selectedType}?url=${encodedURL}`);
-  }, [article_url, router, selectedType]);
+    router.push(`/article?url=${encodedURL}&type=${selectedType}`);
+  }, [article_url, router]);
 
   return (
     <Box sx={{ bgcolor: "#111827", color: "white", minHeight: "100vh" }}>

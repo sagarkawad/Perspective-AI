@@ -15,6 +15,7 @@ import {
 } from "@mui/material";
 import ChatMessage from "@/app/components/ChatMessage";
 import Navbar from "@/app/components/Navbar";
+import { YouTubeEmbed } from "../components/ui/youtube-embed";
 import { useSearchParams } from "next/navigation";
 import TextToSpeech from "../components/TextToSpeech";
 import RelatedTopicsSidebar from "../components/RelatedTopicsSidebar";
@@ -24,10 +25,12 @@ import MarkdownRenderer from "../components/MarkDownRenderer";
 import { getOrCreateMachineId } from "../utils/machineId";
 
 export default function Article() {
+  const [videoId, setVideoId] = useState(""); // Default video
   const [message, setMessage] = useState("");
   const [url, setUrl] = useState<string | null>(null);
   const [tabIndex, setTabIndex] = useState(0);
   const [research, setResearch] = useState();
+  const [type, setType] = useState<string | null>(null);
 
   // States for API responses and loading flags
   const [summary, setSummary] = useState("");
@@ -36,6 +39,7 @@ export default function Article() {
   const [isPerspectiveLoading, setIsPerspectiveLoading] = useState(true);
 
   const searchParams = useSearchParams();
+  const contentType = searchParams.get("type");
   const articleUrl = searchParams.get("url");
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
@@ -56,7 +60,39 @@ export default function Article() {
   // Update URL state when articleUrl changes
   useEffect(() => {
     setUrl(articleUrl);
-  }, [articleUrl]);
+    setType(contentType);
+  }, [articleUrl, contentType]);
+
+  // Extract video ID from URL and update videoId state
+  if (type === "video") {
+    console.log("url", url);
+    useEffect(() => {
+      if (url) {
+        const id = extractVideoId(url);
+        if (id) {
+          setVideoId(id);
+        }
+      }
+    }, [url]);
+
+    // Helper function to extract video ID from various YouTube URLs
+    function extractVideoId(link: string): string | null {
+      try {
+        const urlObj = new URL(link);
+        // For youtu.be links, the pathname is the video id
+        if (urlObj.hostname === "youtu.be") {
+          return urlObj.pathname.slice(1);
+        }
+        // For youtube.com links, the video id is usually in the "v" parameter
+        if (urlObj.hostname.includes("youtube.com")) {
+          return urlObj.searchParams.get("v");
+        }
+      } catch (error) {
+        console.error("Error extracting video id:", error);
+      }
+      return null;
+    }
+  }
 
   useEffect(() => {
     if (articleUrl) {
@@ -75,10 +111,11 @@ export default function Article() {
           const research_data = await research_response.json();
           console.log(research_data.research);
           setResearch(research_data.research);
-
           // Get article summary
           const response = await fetch(
-            "http://localhost:8000/scrape-and-summarize",
+            contentType === "article"
+              ? "http://localhost:8000/scrape-and-summarize"
+              : "http://localhost:8000/analyze-video",
             {
               method: "POST",
               headers: { "Content-Type": "application/json" },
@@ -230,6 +267,7 @@ export default function Article() {
           py: 8,
         }}
       >
+        {type === "video" ? <YouTubeEmbed videoId={videoId} /> : null}
         <Container
           maxWidth="lg"
           sx={{
