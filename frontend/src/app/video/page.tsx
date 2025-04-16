@@ -60,6 +60,7 @@ export default function Home() {
 
   // Extract video ID from URL and update videoId state
   useEffect(() => {
+    console.log("inside use effect", url);
     if (url) {
       const id = extractVideoId(url);
       if (id) {

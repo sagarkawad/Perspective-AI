@@ -16,6 +16,8 @@ import {
 import ChatMessage from "@/app/components/ChatMessage";
 import Navbar from "@/app/components/Navbar";
 import { YouTubeEmbed } from "../components/ui/youtube-embed";
+import { CardFooter } from "@/app/components/ui/card";
+import { ExternalLink } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import TextToSpeech from "../components/TextToSpeech";
 import RelatedTopicsSidebar from "../components/RelatedTopicsSidebar";
@@ -41,6 +43,7 @@ export default function Article() {
   const searchParams = useSearchParams();
   const contentType = searchParams.get("type");
   const articleUrl = searchParams.get("url");
+  console.log("search params type", articleUrl, contentType);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   // Add new state for chat history
@@ -64,38 +67,36 @@ export default function Article() {
   }, [articleUrl, contentType]);
 
   // Extract video ID from URL and update videoId state
-  if (type === "video") {
-    console.log("url", url);
-    useEffect(() => {
-      if (url) {
-        const id = extractVideoId(url);
-        if (id) {
-          setVideoId(id);
-        }
+  useEffect(() => {
+    console.log("inside use effect", url);
+    if (type === "video" && url) {
+      const id = extractVideoId(url);
+      if (id) {
+        setVideoId(id);
       }
-    }, [url]);
-
-    // Helper function to extract video ID from various YouTube URLs
-    function extractVideoId(link: string): string | null {
-      try {
-        const urlObj = new URL(link);
-        // For youtu.be links, the pathname is the video id
-        if (urlObj.hostname === "youtu.be") {
-          return urlObj.pathname.slice(1);
-        }
-        // For youtube.com links, the video id is usually in the "v" parameter
-        if (urlObj.hostname.includes("youtube.com")) {
-          return urlObj.searchParams.get("v");
-        }
-      } catch (error) {
-        console.error("Error extracting video id:", error);
-      }
-      return null;
     }
+  }, [url]);
+
+  // Helper function to extract video ID from various YouTube URLs
+  function extractVideoId(link: string): string | null {
+    try {
+      const urlObj = new URL(link);
+      // For youtu.be links, the pathname is the video id
+      if (urlObj.hostname === "youtu.be") {
+        return urlObj.pathname.slice(1);
+      }
+      // For youtube.com links, the video id is usually in the "v" parameter
+      if (urlObj.hostname.includes("youtube.com")) {
+        return urlObj.searchParams.get("v");
+      }
+    } catch (error) {
+      console.error("Error extracting video id:", error);
+    }
+    return null;
   }
 
   useEffect(() => {
-    if (articleUrl) {
+    if (url) {
       const fetchData = async () => {
         try {
           // API request to get Deep Research
@@ -104,22 +105,23 @@ export default function Article() {
             {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ url: articleUrl }),
+              body: JSON.stringify({ url: url }),
             },
           );
 
           const research_data = await research_response.json();
-          console.log(research_data.research);
           setResearch(research_data.research);
+          console.log("type", type);
+          console.log("url", url);
           // Get article summary
           const response = await fetch(
-            contentType === "article"
+            type === "article"
               ? "http://localhost:8000/scrape-and-summarize"
               : "http://localhost:8000/analyze-video",
             {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ url: articleUrl }),
+              body: JSON.stringify({ url: url }),
             },
           );
           const data = await response.json();
@@ -193,7 +195,7 @@ export default function Article() {
       };
       fetchData();
     }
-  }, [articleUrl]);
+  }, [url]);
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
