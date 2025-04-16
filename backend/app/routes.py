@@ -16,6 +16,7 @@ from app.utils.machine_id import get_machine_id
 router = APIRouter()
 logger = logging.getLogger("uvicorn.error")
 
+
 class ArticleRequest(BaseModel):
     summary: str  # summarized article text to generate opposite perspective
 
@@ -27,10 +28,12 @@ class ScrapURLRequest(BaseModel):
 class RelatedTopicsRequest(BaseModel):
     summary: str  # Ensure this matches the frontend's request
 
+
 class RelatedContext(BaseModel):
     summary: str
     perspective: str
     question: str
+
 
 class InitializeChatRequest(BaseModel):
     url: str
@@ -38,11 +41,13 @@ class InitializeChatRequest(BaseModel):
     perspective: str
     machine_id: str
 
+
 class ChatRequest(BaseModel):
     url: str
     question: str
     thread_id: Optional[str] = None
     machine_id: str
+
 
 class ChatHistoryRequest(BaseModel):
     url: str
@@ -97,6 +102,7 @@ async def get_related_topics(request: RelatedTopicsRequest):
     related_topics = generate_related_topics(request.summary)
     return {"topics": related_topics}
 
+
 @router.post("/initialize-chat")
 async def initialize_chat(request: InitializeChatRequest):
     """Initialize a new chat session."""
@@ -106,6 +112,7 @@ async def initialize_chat(request: InitializeChatRequest):
         request.perspective,
         request.machine_id
     )
+
 
 @router.post("/chat")
 async def chat(request: ChatRequest):
@@ -117,6 +124,7 @@ async def chat(request: ChatRequest):
         request.machine_id
     )
 
+
 @router.post("/chat-history")
 async def get_chat_history(request: ChatHistoryRequest):
     """Get chat history for the current machine and URL."""
@@ -126,4 +134,3 @@ async def get_chat_history(request: ChatHistoryRequest):
             detail="Machine ID is required for chat history"
         )
     return chat_manager.get_chat_history(request.url, request.machine_id)
-

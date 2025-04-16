@@ -3,7 +3,16 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkBreaks from "remark-breaks";
 
+function removeLatex(text: string): string {
+  // Remove $$...$$ (multiline/block LaTeX)
+  text = text.replace(/\$\$[\s\S]*?\$\$/g, "");
+  // Remove $...$ (inline LaTeX)
+  text = text.replace(/\$[^$]*\$/g, "");
+  return text;
+}
+
 function MarkdownRenderer({ content }: { content: string }) {
+  const sanitizedContent = removeLatex(content);
   return (
     <div className="markdown-content">
       <ReactMarkdown
@@ -81,7 +90,7 @@ function MarkdownRenderer({ content }: { content: string }) {
           ),
         }}
       >
-        {content}
+        {sanitizedContent}
       </ReactMarkdown>
     </div>
   );
