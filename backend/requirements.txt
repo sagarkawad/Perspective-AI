@@ -7,3 +7,16 @@ urllib3
 newspaper3k
 httpx
 yt_dlp
+numpy
+
+# LangChain and related packages
+langchain
+langchain-core
+langchain-huggingface
+langchain-community  # For HuggingFaceInferenceAPIEmbeddings and other community tools
+langchain-text-splitters
+langchain-openai
+
+# LangGraph packages
+langgraph
+

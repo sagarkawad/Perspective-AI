@@ -7,9 +7,10 @@ from dotenv import load_dotenv
 load_dotenv()
 API_KEY = os.getenv("API_KEY")
 
+
 def generate_related_topics(summary: str):
     url = "https://openrouter.ai/api/v1/chat/completions"
-    
+
     headers = {
         "Authorization": f"Bearer {API_KEY}",
         "Content-Type": "application/json"
@@ -19,7 +20,7 @@ def generate_related_topics(summary: str):
         "model": "deepseek/deepseek-r1-zero:free",
         "messages": [
             {
-                "role": "system", 
+                "role": "system",
                 "content": "You are an AI that only generates relevant links to topics based on a given summary."
             },
             {
