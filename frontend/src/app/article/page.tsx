@@ -15,9 +15,6 @@ import {
 } from "@mui/material";
 import ChatMessage from "@/app/components/ChatMessage";
 import Navbar from "@/app/components/Navbar";
-import { YouTubeEmbed } from "../components/ui/youtube-embed";
-import { CardFooter } from "@/app/components/ui/card";
-import { ExternalLink } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import TextToSpeech from "../components/TextToSpeech";
 import RelatedTopicsSidebar from "../components/RelatedTopicsSidebar";
@@ -25,15 +22,15 @@ import ResearchDashboard from "../components/research-dashboard";
 import { SummaryData } from "../components/research-dashboard";
 import MarkdownRenderer from "../components/MarkDownRenderer";
 import { getOrCreateMachineId } from "../utils/machineId";
+import { YouTubeEmbed } from "../components/ui/youtube-embed";
 
 export default function Article() {
   const [videoId, setVideoId] = useState(""); // Default video
   const [message, setMessage] = useState("");
   const [url, setUrl] = useState<string | null>(null);
+  const [type, setType] = useState<string | null>(null);
   const [tabIndex, setTabIndex] = useState(0);
   const [research, setResearch] = useState();
-  const [type, setType] = useState<string | null>(null);
-
   // States for API responses and loading flags
   const [summary, setSummary] = useState("");
   const [perspective, setPerspective] = useState("");
@@ -41,9 +38,8 @@ export default function Article() {
   const [isPerspectiveLoading, setIsPerspectiveLoading] = useState(true);
 
   const searchParams = useSearchParams();
-  const contentType = searchParams.get("type");
   const articleUrl = searchParams.get("url");
-  console.log("search params type", articleUrl, contentType);
+  const contentType = searchParams.get("type");
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   // Add new state for chat history
@@ -66,10 +62,9 @@ export default function Article() {
     setType(contentType);
   }, [articleUrl, contentType]);
 
-  // Extract video ID from URL and update videoId state
   useEffect(() => {
     console.log("inside use effect", url);
-    if (type === "video" && url) {
+    if (url) {
       const id = extractVideoId(url);
       if (id) {
         setVideoId(id);
@@ -110,9 +105,9 @@ export default function Article() {
           );
 
           const research_data = await research_response.json();
+          console.log(research_data.research);
           setResearch(research_data.research);
-          console.log("type", type);
-          console.log("url", url);
+
           // Get article summary
           const response = await fetch(
             type === "article"
@@ -195,7 +190,7 @@ export default function Article() {
       };
       fetchData();
     }
-  }, [url]);
+  }, [url, type]);
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -270,6 +265,7 @@ export default function Article() {
         }}
       >
         {type === "video" ? <YouTubeEmbed videoId={videoId} /> : null}
+
         <Container
           maxWidth="lg"
           sx={{
@@ -323,9 +319,7 @@ export default function Article() {
                     </Typography>
                     <TextToSpeech text={summary} />
 
-                    <Typography variant="body1" paragraph>
-                      <MarkdownRenderer content={summary} />
-                    </Typography>
+                    <MarkdownRenderer content={summary} />
                     <Typography
                       variant="subtitle2"
                       color="textSecondary"
