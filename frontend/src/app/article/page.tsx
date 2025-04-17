@@ -211,6 +211,7 @@ export default function Article() {
           question: userMessage,
           thread_id: threadId,
           machine_id: getOrCreateMachineId(),
+          vm: true,
         }),
       });
 
@@ -226,6 +227,10 @@ export default function Article() {
         ...prev,
         { isAI: true, message: data.response },
       ]);
+      // Play the audio if audio data is present
+      if (data.audio) {
+        playAudio(data.audio);
+      }
     } catch (error) {
       console.error("Error in chat:", error);
       setChatHistory((prev) => [
@@ -238,6 +243,27 @@ export default function Article() {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  // Helper function to play base64 audio
+  const playAudio = (base64Audio: string) => {
+    // Create a new Audio object with the data URL
+    const audio = new Audio(base64Audio);
+    
+    // Add error handling
+    audio.onerror = (error) => {
+      console.error("Audio playback error:", error);
+    };
+    
+    // Play the audio
+    audio.play()
+      .catch((error) => {
+        console.error("Audio playback failed:", error);
+        // Handle autoplay restrictions
+        if (error.name === "NotAllowedError") {
+          console.log("Please interact with the page first to enable audio playback");
+        }
+      });
   };
 
   const cardStyle = {
@@ -437,6 +463,15 @@ export default function Article() {
                       disabled={isLoading || !isChatInitialized}
                     >
                       Send
+                    </Button>
+                    <Button
+                      type="submit"
+                      variant="contained"
+                      color="primary"
+                      sx={{ borderRadius: "12px", px: 4 }}
+                      disabled={isLoading || !isChatInitialized}
+                    >
+                      VM
                     </Button>
                   </Box>
                 </CardContent>

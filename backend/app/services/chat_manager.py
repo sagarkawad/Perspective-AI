@@ -5,6 +5,9 @@ from fastapi import HTTPException, Depends
 from app.db.database import SessionLocal, get_db
 from app.db.models import ChatSession, ChatMessage
 from sqlalchemy.orm import Session
+from app.services.voice_service import openai_voice
+import asyncio
+
 
 class ChatManager:
     def __init__(self):
@@ -25,7 +28,7 @@ class ChatManager:
     def initialize_chat(self, url: str, summary: str, perspective: str, machine_id: str) -> dict:
         """Initialize a new chat session"""
         self.cleanup_old_sessions()
-        
+
         # Create database session
         db = SessionLocal()
         try:
@@ -40,38 +43,40 @@ class ChatManager:
             db.commit()
             db.refresh(new_session)
             session_id = new_session.id
-            
+
             # Initialize chat service
             chat_service = create_chat_service(summary, perspective)
             self.chat_services[url] = (chat_service, datetime.now())
-            
+
             return {"status": "initialized", "session_id": session_id}
-            
+
         finally:
             db.close()
 
-    def get_chat_response(self, url: str, question: str, thread_id: Optional[str] = None, machine_id: Optional[str] = None) -> dict:
+    def get_chat_response(self, url: str, question: str, thread_id: Optional[str] = None, machine_id: Optional[str] = None, vm: bool = True) -> dict:
         """Get response for a chat message"""
         self.cleanup_old_sessions()
-        
+
         if url not in self.chat_services:
-            raise HTTPException(status_code=404, detail="Chat session not found")
-            
+            raise HTTPException(
+                status_code=404, detail="Chat session not found")
+
         db = SessionLocal()
-        
+
         try:
             # Get session
             session = db.query(ChatSession).filter(
                 ChatSession.url == url,
                 ChatSession.machine_id == machine_id
             ).first()
-            
+
             if not session:
-                raise HTTPException(status_code=404, detail="Chat session not found")
-            
+                raise HTTPException(
+                    status_code=404, detail="Chat session not found")
+
             # Update last accessed time
             session.last_accessed = datetime.utcnow()
-            
+
             # Store user message
             user_message = ChatMessage(
                 session_id=session.id,
@@ -80,11 +85,12 @@ class ChatManager:
                 message=question
             )
             db.add(user_message)
-            
+
             # Get AI response
             chat_service, _ = self.chat_services[url]
-            response, thread_id = chat_service.generate_response(question, thread_id)
-            
+            response, thread_id = chat_service.generate_response(
+                question, thread_id)
+
             # Store AI response
             ai_message = ChatMessage(
                 session_id=session.id,
@@ -93,31 +99,39 @@ class ChatManager:
                 message=response.content
             )
             db.add(ai_message)
-            
+
             db.commit()
-            
-            return {"response": response.content, "thread_id": thread_id}
-            
+            if vm:
+                try:
+                    audio = openai_voice(response.content)
+                    return {"response": response.content, "thread_id": thread_id, "audio": audio}
+                except Exception as e:
+                    print("err", e)
+                    return e
+            else:
+                return {"response": response.content, "thread_id": thread_id}
+            # return {"response": response.content, "thread_id": thread_id}
+
         finally:
             db.close()
-            
+
     def get_chat_history(self, url: str, machine_id: str) -> list:
         """Get chat history for a URL and machine ID"""
         db = SessionLocal()
-        
+
         try:
             session = db.query(ChatSession).filter(
                 ChatSession.machine_id == machine_id,
                 ChatSession.url == url
             ).first()
-            
+
             if not session:
                 return []
-                
+
             messages = db.query(ChatMessage).filter(
                 ChatMessage.session_id == session.id
             ).order_by(ChatMessage.timestamp).all()
-            
+
             return [
                 {
                     "isAI": msg.is_ai == 1,
@@ -126,9 +140,10 @@ class ChatManager:
                 }
                 for msg in messages
             ]
-            
+
         finally:
             db.close()
 
+
 # Create a singleton instance
-chat_manager = ChatManager() 
+chat_manager = ChatManager()

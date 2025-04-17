@@ -57,6 +57,7 @@ class ChatRequest(BaseModel):
     question: str
     thread_id: Optional[str] = None
     machine_id: str
+    vm: bool
 
 
 class ChatHistoryRequest(BaseModel):
@@ -150,7 +151,8 @@ async def chat(request: ChatRequest):
         request.url,
         request.question,
         request.thread_id,
-        request.machine_id
+        request.machine_id,
+        request.vm,
     )
 
 
