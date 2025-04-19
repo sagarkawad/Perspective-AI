@@ -14,6 +14,7 @@ from app.services.deep_research import do_deep_research
 from app.services.youtube_service import get_transcription
 from app.services.chat_manager import chat_manager
 from app.utils.machine_id import get_machine_id
+from PyPDF2 import PdfReader
 
 router = APIRouter()
 logger = logging.getLogger("uvicorn.error")
@@ -25,6 +26,10 @@ class ArticleRequest(BaseModel):
 
 class ScrapURLRequest(BaseModel):
     url: str  # URL to scrape data from
+
+
+# class PdfContent(BaseModel):
+#     content: str
 
 
 class ResearchURLRequest(BaseModel):
@@ -75,6 +80,11 @@ def generate_ai_perspective(request: ArticleRequest):
         logger.error("Error in generate-perspective: %s", e)
         raise HTTPException(
             status_code=500, detail="Error generating perspective")
+
+
+# @router.post("/summarize")
+# async def summarize_article(pdf )
+#     try:
 
 
 @router.post("/scrape-and-summarize")

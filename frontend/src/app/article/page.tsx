@@ -36,6 +36,7 @@ export default function Article() {
   const [perspective, setPerspective] = useState("");
   const [isSummaryLoading, setIsSummaryLoading] = useState(true);
   const [isPerspectiveLoading, setIsPerspectiveLoading] = useState(true);
+  const [isPdf, setIsPdf] = useState(null);
 
   const searchParams = useSearchParams();
   const articleUrl = searchParams.get("url");
@@ -107,6 +108,14 @@ export default function Article() {
           const research_data = await research_response.json();
           console.log(research_data.research);
           setResearch(research_data.research);
+
+          if (isPdf) {
+            const response = await fetch("http://localhost:8000/pdf", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ content: content }),
+            });
+          }
 
           // Get article summary
           const response = await fetch(
@@ -249,21 +258,22 @@ export default function Article() {
   const playAudio = (base64Audio: string) => {
     // Create a new Audio object with the data URL
     const audio = new Audio(base64Audio);
-    
+
     // Add error handling
     audio.onerror = (error) => {
       console.error("Audio playback error:", error);
     };
-    
+
     // Play the audio
-    audio.play()
-      .catch((error) => {
-        console.error("Audio playback failed:", error);
-        // Handle autoplay restrictions
-        if (error.name === "NotAllowedError") {
-          console.log("Please interact with the page first to enable audio playback");
-        }
-      });
+    audio.play().catch((error) => {
+      console.error("Audio playback failed:", error);
+      // Handle autoplay restrictions
+      if (error.name === "NotAllowedError") {
+        console.log(
+          "Please interact with the page first to enable audio playback",
+        );
+      }
+    });
   };
 
   const cardStyle = {

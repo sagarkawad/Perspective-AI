@@ -5,11 +5,11 @@ import remarkBreaks from "remark-breaks";
 
 function removeLatex(text: string): string {
   // Remove \boxed{...} (LaTeX boxed environment)
-  text = text.replace(/\\boxed{([^}]*)}/g, '$1');
+  text = text.replace(/\\boxed{([^}]*)}/g, "$1");
   // Remove $$...$$ (multiline/block LaTeX)
-  text = text.replace(/\$\$[\s\S]*?\$\$/g, '');
+  text = text.replace(/\$\$[\s\S]*?\$\$/g, "");
   // Remove $...$ (inline LaTeX)
-  text = text.replace(/\$[^$]*\$/g, '');
+  text = text.replace(/\$[^$]*\$/g, "");
   return text;
 }
 
