@@ -15,18 +15,44 @@ import {
 import Navbar from "@/app/components/Navbar";
 import AnalyzeButton from "@/app/components/Utils/AnalyzeButton";
 import DescCard from "@/app/components/Utils/DescCard";
+import { useEffect } from "react";
+import { textState } from "@/recoil/atoms";
+import { useRecoilState } from "recoil";
 
-export default function Home() {
+// Define proper TypeScript interfaces
+interface TextItem {
+  str: string;
+  dir?: string;
+  transform?: number[];
+  width?: number;
+  height?: number;
+  fontName?: string;
+}
+
+interface TextContent {
+  items: TextItem[];
+}
+
+const Home = () => {
   const [article_url, setArticleURL] = useState("");
   const [selectedType, setSelectedType] = useState("article"); // default to article
+  //const [text, setText] = useRecoilState(textState);
+  const [text, setText] = useState("");
   const router = useRouter();
 
   const handleSubmit = useCallback(() => {
+    if (text) {
+      router.push(`/article?type=pdf`);
+    }
     if (!article_url.trim()) return; // Prevents navigation if the input is empty
     const encodedURL = encodeURIComponent(article_url);
     console.log("selectedType", selectedType);
     router.push(`/article?url=${encodedURL}&type=${selectedType}`);
-  }, [article_url, router, selectedType]);
+  }, [article_url, router, selectedType, text]);
+
+  const handleFileChange = () => {
+    setText("This is a sample text from the pdf");
+  };
 
   return (
     <Box sx={{ bgcolor: "#111827", color: "white", minHeight: "100vh" }}>
@@ -44,6 +70,7 @@ export default function Home() {
         >
           Discover Different Perspectives
         </Typography>
+        <input type="file" accept=".pdf" onChange={handleFileChange} />
         <Typography variant="h6" sx={{ maxWidth: 600, mx: "auto" }}>
           Enter an article URL to analyze multiple viewpoints and engage in
           discussions.
@@ -130,4 +157,6 @@ export default function Home() {
       </Container>
     </Box>
   );
-}
+};
+
+export default Home;

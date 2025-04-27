@@ -36,7 +36,7 @@ export default function Article() {
   const [perspective, setPerspective] = useState("");
   const [isSummaryLoading, setIsSummaryLoading] = useState(true);
   const [isPerspectiveLoading, setIsPerspectiveLoading] = useState(true);
-  const [isPdf, setIsPdf] = useState(null);
+  const [text, setText] = useState("");
 
   const searchParams = useSearchParams();
   const articleUrl = searchParams.get("url");
@@ -61,10 +61,13 @@ export default function Article() {
   useEffect(() => {
     setUrl(articleUrl);
     setType(contentType);
-  }, [articleUrl, contentType]);
+    console.log("type", contentType);
+  }, []);
 
   useEffect(() => {
-    console.log("inside use effect", url);
+    console.log("inside use effect", articleUrl);
+    console.log("inside use effect", contentType);
+
     if (url) {
       const id = extractVideoId(url);
       if (id) {
@@ -92,10 +95,10 @@ export default function Article() {
   }
 
   useEffect(() => {
-    if (url) {
-      const fetchData = async () => {
-        try {
-          // API request to get Deep Research
+    const fetchData = async () => {
+      try {
+        // API request to get Deep Research
+        if (contentType === "article" || contentType === "video") {
           const research_response = await fetch(
             "http://localhost:8000/deep-research",
             {
@@ -108,97 +111,92 @@ export default function Article() {
           const research_data = await research_response.json();
           console.log(research_data.research);
           setResearch(research_data.research);
+        }
 
-          if (isPdf) {
-            const response = await fetch("http://localhost:8000/pdf", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ content: content }),
-            });
-          }
+        // Get article summary
+        const response = await fetch(
+          contentType === "article" || contentType === "pdf"
+            ? "http://localhost:8000/scrape-and-summarize"
+            : "http://localhost:8000/analyze-video",
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body:
+              type === "article" || type === "video"
+                ? JSON.stringify({ url: url })
+                : JSON.stringify({ content: text }),
+          },
+        );
+        const data = await response.json();
+        console.log("Received summary response:", data);
 
-          // Get article summary
-          const response = await fetch(
-            type === "article"
-              ? "http://localhost:8000/scrape-and-summarize"
-              : "http://localhost:8000/analyze-video",
-            {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ url: url }),
-            },
-          );
-          const data = await response.json();
-          console.log("Received summary response:", data);
+        const summaryText = data.summary;
+        if (!summaryText) {
+          throw new Error("Summary text not found in response");
+        }
+        setSummary(summaryText);
+        setIsSummaryLoading(false);
 
-          const summaryText = data.summary;
-          if (!summaryText) {
-            throw new Error("Summary text not found in response");
-          }
-          setSummary(summaryText);
-          setIsSummaryLoading(false);
+        // Request for AI perspective using the summary text
+        const resPerspective = await fetch(
+          "http://localhost:8000/generate-perspective",
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ summary: summaryText }),
+          },
+        );
+        const dataPerspective = await resPerspective.json();
+        console.log("Received perspective response:", dataPerspective);
+        setPerspective(dataPerspective.perspective);
+        setIsPerspectiveLoading(false);
 
-          // Request for AI perspective using the summary text
-          const resPerspective = await fetch(
-            "http://localhost:8000/generate-perspective",
-            {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ summary: summaryText }),
-            },
-          );
-          const dataPerspective = await resPerspective.json();
-          console.log("Received perspective response:", dataPerspective);
-          setPerspective(dataPerspective.perspective);
-          setIsPerspectiveLoading(false);
+        // Initialize chat session
+        await fetch(`http://localhost:8000/initialize-chat`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            url: articleUrl,
+            summary: summaryText,
+            perspective: dataPerspective.perspective,
+            machine_id: getOrCreateMachineId(),
+          }),
+        });
 
-          // Initialize chat session
-          await fetch(`http://localhost:8000/initialize-chat`, {
+        // Fetch existing chat history
+        const historyResponse = await fetch(
+          `http://localhost:8000/chat-history`,
+          {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               url: articleUrl,
-              summary: summaryText,
-              perspective: dataPerspective.perspective,
               machine_id: getOrCreateMachineId(),
             }),
-          });
+          },
+        );
+        const historyData = await historyResponse.json();
 
-          // Fetch existing chat history
-          const historyResponse = await fetch(
-            `http://localhost:8000/chat-history`,
-            {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                url: articleUrl,
-                machine_id: getOrCreateMachineId(),
-              }),
-            },
-          );
-          const historyData = await historyResponse.json();
-
-          // Always include the greeting message at the beginning
-          const greetingMessage = {
-            isAI: true,
-            message:
-              "Hello! I've analyzed the article. What would you like to know about it?",
-          };
-          if (historyData && historyData.length > 0) {
-            setChatHistory([greetingMessage, ...historyData]);
-          } else {
-            setChatHistory([greetingMessage]);
-          }
-
-          setIsChatInitialized(true);
-        } catch (error) {
-          console.error("Error fetching article analysis:", error);
-          setIsSummaryLoading(false);
-          setIsPerspectiveLoading(false);
+        // Always include the greeting message at the beginning
+        const greetingMessage = {
+          isAI: true,
+          message:
+            "Hello! I've analyzed the article. What would you like to know about it?",
+        };
+        if (historyData && historyData.length > 0) {
+          setChatHistory([greetingMessage, ...historyData]);
+        } else {
+          setChatHistory([greetingMessage]);
         }
-      };
-      fetchData();
-    }
+
+        setIsChatInitialized(true);
+      } catch (error) {
+        console.error("Error fetching article analysis:", error);
+        setIsSummaryLoading(false);
+        setIsPerspectiveLoading(false);
+      }
+    };
+    fetchData();
   }, [url, type]);
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {

@@ -25,7 +25,8 @@ class ArticleRequest(BaseModel):
 
 
 class ScrapURLRequest(BaseModel):
-    url: str  # URL to scrape data from
+    url: Optional[str] = None  # URL to scrape data from
+    content: Optional[str] = None
 
 
 # class PdfContent(BaseModel):
@@ -89,14 +90,19 @@ def generate_ai_perspective(request: ArticleRequest):
 
 @router.post("/scrape-and-summarize")
 async def scrape_article(article: ScrapURLRequest):
+    print("hello")
     print("huhuh")
+    print("content", article.content)
     try:
-        if not article.url:
-            raise HTTPException(status_code=422, detail="URL is required")
+        # if not article.url or not article.content:
+        #     raise HTTPException(status_code=422, detail="URL is required")
 
         # Scrape the website
         print(article.url)
-        data = scrape_website(article.url)
+        if article.url:
+            data = scrape_website(article.url)
+        elif article.content:
+            data = article.content
         if data is None:
             logger.error("Scraped data is None for URL: %s", article.url)
             raise HTTPException(
