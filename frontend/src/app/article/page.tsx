@@ -37,7 +37,7 @@ export default function Article() {
   const [perspective, setPerspective] = useState("");
   const [isSummaryLoading, setIsSummaryLoading] = useState(true);
   const [isPerspectiveLoading, setIsPerspectiveLoading] = useState(true);
-  const { text, setText } = useStore();
+  const { file, setFile } = useStore();
 
   const searchParams = useSearchParams();
   const articleUrl = searchParams.get("url");
@@ -115,19 +115,35 @@ export default function Article() {
         }
 
         // Get article summary
-        const response = await fetch(
-          contentType === "article" || contentType === "pdf"
-            ? "http://localhost:8000/scrape-and-summarize"
-            : "http://localhost:8000/analyze-video",
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body:
-              type === "article" || type === "video"
-                ? JSON.stringify({ url: url })
-                : JSON.stringify({ content: text }),
-          },
-        );
+        let response;
+        if (contentType === "pdf") {
+          if (file) {
+            const formData = new FormData();
+            formData.append("file", file);
+
+            response = await fetch(
+              "http://localhost:8000/scrape-and-summarize",
+              {
+                method: "POST",
+                body: formData,
+              },
+            );
+          }
+        } else {
+          response = await fetch(
+            contentType === "article"
+              ? "http://localhost:8000/scrape-and-summarize"
+              : "http://localhost:8000/analyze-video",
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ url: url }),
+            },
+          );
+        }
+        if (!response) {
+          return;
+        }
         const data = await response.json();
         console.log("Received summary response:", data);
 

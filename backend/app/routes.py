@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Request, UploadFile, File, Form
 from pydantic import BaseModel
 from app.scrapers.article_scraper import scrape_website
 from app.scrapers.clean_data import clean_scraped_data
@@ -15,6 +15,8 @@ from app.services.youtube_service import get_transcription
 from app.services.chat_manager import chat_manager
 from app.utils.machine_id import get_machine_id
 from PyPDF2 import PdfReader
+from typing import BinaryIO
+import fitz
 
 router = APIRouter()
 logger = logging.getLogger("uvicorn.error")
@@ -26,7 +28,6 @@ class ArticleRequest(BaseModel):
 
 class ScrapURLRequest(BaseModel):
     url: Optional[str] = None  # URL to scrape data from
-    content: Optional[str] = None
 
 
 # class PdfContent(BaseModel):
@@ -89,22 +90,34 @@ def generate_ai_perspective(request: ArticleRequest):
 
 
 @router.post("/scrape-and-summarize")
-async def scrape_article(article: ScrapURLRequest):
+async def scrape_article(article_url: str = Form(None),
+                         file: UploadFile = File(None)):
     print("hello")
     print("huhuh")
-    print("content", article.content)
+    # print("content", article.content)
     try:
+        data = None
         # if not article.url or not article.content:
         #     raise HTTPException(status_code=422, detail="URL is required")
 
         # Scrape the website
-        print(article.url)
-        if article.url:
-            data = scrape_website(article.url)
-        elif article.content:
-            data = article.content
-        if data is None:
-            logger.error("Scraped data is None for URL: %s", article.url)
+        print(article_url)
+        if article_url:
+            print("DEBUG: Entering article_url block")
+            data = scrape_website(article_url)
+        elif file:
+            print("DEBUG: Entering file")
+            contents = await file.read()
+            doc = fitz.open(stream=contents, filetype="pdf")
+            text = ""
+            for page in doc:
+                text += page.get_text()
+            data = text
+        else:
+            print("DEBUG: Entering else")
+
+            logger.error(
+                "from the 3rd elif, Scraped data is None for URL: %s", article_url)
             raise HTTPException(
                 status_code=500, detail="Error scraping the article. No data returned.")
         logger.info("Scraped data: %s", data)

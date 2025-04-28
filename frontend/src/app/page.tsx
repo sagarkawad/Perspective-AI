@@ -39,19 +39,23 @@ const Home = () => {
   const [selectedType, setSelectedType] = useState("article"); // default to article
   const router = useRouter();
 
-  const { text, setText } = useStore();
+  const { file, setFile } = useStore();
 
   const handleSubmit = useCallback(() => {
-    if (text) {
+    if (file) {
       router.push(`/article?type=pdf`);
     }
     if (!article_url.trim()) return; // Prevents navigation if the input is empty
     const encodedURL = encodeURIComponent(article_url);
     console.log("selectedType", selectedType);
     router.push(`/article?url=${encodedURL}&type=${selectedType}`);
-  }, [article_url, router, selectedType, text]);
+  }, [article_url, router, selectedType, file]);
 
-  const handleFileChange = () => { };
+  const handleFileChange = (e: any) => {
+    if (e.target.files) {
+      setFile(e.target.files[0]);
+    }
+  };
 
   return (
     <Box sx={{ bgcolor: "#111827", color: "white", minHeight: "100vh" }}>
