@@ -23,6 +23,7 @@ import { SummaryData } from "../components/research-dashboard";
 import MarkdownRenderer from "../components/MarkDownRenderer";
 import { getOrCreateMachineId } from "../utils/machineId";
 import { YouTubeEmbed } from "../components/ui/youtube-embed";
+import { useStore } from "@/zustand/states";
 
 export default function Article() {
   const [videoId, setVideoId] = useState(""); // Default video
@@ -36,7 +37,7 @@ export default function Article() {
   const [perspective, setPerspective] = useState("");
   const [isSummaryLoading, setIsSummaryLoading] = useState(true);
   const [isPerspectiveLoading, setIsPerspectiveLoading] = useState(true);
-  const [text, setText] = useState("");
+  const { text, setText } = useStore();
 
   const searchParams = useSearchParams();
   const articleUrl = searchParams.get("url");

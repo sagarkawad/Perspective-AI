@@ -18,6 +18,7 @@ import DescCard from "@/app/components/Utils/DescCard";
 import { useEffect } from "react";
 import { textState } from "@/recoil/atoms";
 import { useRecoilState } from "recoil";
+import { useStore } from "@/zustand/states";
 
 // Define proper TypeScript interfaces
 interface TextItem {
@@ -36,9 +37,9 @@ interface TextContent {
 const Home = () => {
   const [article_url, setArticleURL] = useState("");
   const [selectedType, setSelectedType] = useState("article"); // default to article
-  //const [text, setText] = useRecoilState(textState);
-  const [text, setText] = useState("");
   const router = useRouter();
+
+  const { text, setText } = useStore();
 
   const handleSubmit = useCallback(() => {
     if (text) {
@@ -50,9 +51,7 @@ const Home = () => {
     router.push(`/article?url=${encodedURL}&type=${selectedType}`);
   }, [article_url, router, selectedType, text]);
 
-  const handleFileChange = () => {
-    setText("This is a sample text from the pdf");
-  };
+  const handleFileChange = () => { };
 
   return (
     <Box sx={{ bgcolor: "#111827", color: "white", minHeight: "100vh" }}>
