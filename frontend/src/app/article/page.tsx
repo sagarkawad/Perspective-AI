@@ -105,7 +105,7 @@ export default function Article() {
             {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ url: url }),
+              body: JSON.stringify({ url: articleUrl }),
             },
           );
 
@@ -130,30 +130,48 @@ export default function Article() {
             );
           }
         } else {
+          const formData = new FormData();
+          formData.append("url", articleUrl as string);
           response = await fetch(
             contentType === "article"
               ? "http://localhost:8000/scrape-and-summarize"
               : "http://localhost:8000/analyze-video",
-            {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ url: url }),
-            },
+            contentType === "article"
+              ? {
+                method: "POST",
+                body: formData,
+              }
+              : {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ url: articleUrl }),
+              },
           );
         }
         if (!response) {
           return;
         }
-        const data = await response.json();
-        console.log("Received summary response:", data);
-
-        const summaryText = data.summary;
-        if (!summaryText) {
-          throw new Error("Summary text not found in response");
+        if (!response.body) {
+          return;
         }
-        setSummary(summaryText);
-        setIsSummaryLoading(false);
 
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder("utf-8");
+        let summary = "";
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          const chunk = decoder.decode(value);
+
+          if (chunk.startsWith("data: ")) {
+            const content = chunk.replace("data: ", "").trim();
+            summary += content;
+            setSummary(summary);
+          }
+        }
+        setIsSummaryLoading(false);
         // Request for AI perspective using the summary text
         const resPerspective = await fetch(
           "http://localhost:8000/generate-perspective",
@@ -213,6 +231,7 @@ export default function Article() {
         setIsPerspectiveLoading(false);
       }
     };
+
     fetchData();
   }, [url, type]);
 

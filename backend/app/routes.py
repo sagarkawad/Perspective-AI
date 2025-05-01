@@ -1,8 +1,9 @@
 from fastapi import APIRouter, HTTPException, Request, UploadFile, File, Form
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from app.scrapers.article_scraper import scrape_website
 from app.scrapers.clean_data import clean_scraped_data
-from app.services.summarization_service import summarize_text
+from app.services.summarization_service import summarize_text_stream
 import json
 from app.services.counter_service import generate_opposite_perspective
 import logging
@@ -27,7 +28,7 @@ class ArticleRequest(BaseModel):
 
 
 class ScrapURLRequest(BaseModel):
-    url: Optional[str] = None  # URL to scrape data from
+    url: str  # URL to scrape data from
 
 
 # class PdfContent(BaseModel):
@@ -90,11 +91,12 @@ def generate_ai_perspective(request: ArticleRequest):
 
 
 @router.post("/scrape-and-summarize")
-async def scrape_article(article_url: str = Form(None),
+async def scrape_article(url: str = Form(None),
                          file: UploadFile = File(None)):
     print("hello")
     print("huhuh")
     # print("content", article.content)
+    article_url = url
     try:
         data = None
         # if not article.url or not article.content:
@@ -122,16 +124,21 @@ async def scrape_article(article_url: str = Form(None),
                 status_code=500, detail="Error scraping the article. No data returned.")
         logger.info("Scraped data: %s", data)
 
-        # Clean the data (make sure data is a string)
+    # Clean the data
         clean = clean_scraped_data(data)
-        print("Cleaned data: %s", clean)
 
-        # Summarize the text
-        summary = summarize_text({"inputs": clean})
-        print("Summary output: %s", summary)
+        # Create a generator function that will stream the summary
+        async def generate_summary_chunks():
+            # Use your existing summarize_text_stream function
+            for chunk in summarize_text_stream({"inputs": clean}):
+                yield f"data: {json.dumps({'chunk': chunk})}\n\n"
+            yield "data: [DONE]\n\n"
 
-        # Return summary directly (assuming it's a JSON-serializable object)
-        return {"summary": summary}
+        # Return as a streaming response
+        return StreamingResponse(
+            generate_summary_chunks(),
+            media_type="text/event-stream"
+        )
     except Exception as e:
         logger.error("Error in scrape-and-summarize: %s", e, exc_info=True)
         raise HTTPException(status_code=500, detail="Error processing the URL")
