@@ -157,19 +157,14 @@ export default function Article() {
 
         const reader = response.body.getReader();
         const decoder = new TextDecoder("utf-8");
-        let summary = "";
 
         while (true) {
           const { done, value } = await reader.read();
           if (done) break;
 
           const chunk = decoder.decode(value);
-
-          if (chunk.startsWith("data: ")) {
-            const content = chunk.replace("data: ", "").trim();
-            summary += content;
-            setSummary(summary);
-          }
+          console.log("chunk - ", chunk);
+          setSummary((prev) => prev + chunk);
         }
         setIsSummaryLoading(false);
         // Request for AI perspective using the summary text
@@ -178,7 +173,7 @@ export default function Article() {
           {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ summary: summaryText }),
+            body: JSON.stringify({ summary: summary }),
           },
         );
         const dataPerspective = await resPerspective.json();
@@ -192,7 +187,7 @@ export default function Article() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             url: articleUrl,
-            summary: summaryText,
+            summary: summary,
             perspective: dataPerspective.perspective,
             machine_id: getOrCreateMachineId(),
           }),

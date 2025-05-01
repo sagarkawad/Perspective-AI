@@ -131,8 +131,7 @@ async def scrape_article(url: str = Form(None),
         async def generate_summary_chunks():
             # Use your existing summarize_text_stream function
             for chunk in summarize_text_stream({"inputs": clean}):
-                yield f"data: {json.dumps({'chunk': chunk})}\n\n"
-            yield "data: [DONE]\n\n"
+                yield f"{chunk}"
 
         # Return as a streaming response
         return StreamingResponse(
