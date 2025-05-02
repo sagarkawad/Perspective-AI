@@ -164,7 +164,7 @@ async def analyze_video(request: VideoRequest):
     if video_text["status"] == "error":
         return video_text  # Directly return the error message to the frontend
 
-    summary = summarize_text({"inputs": video_text["text"]})
+    summary = summarize_text_stream({"inputs": video_text["text"]})
     return {"status": "success", "summary": summary}
 
 

@@ -136,16 +136,10 @@ export default function Article() {
             contentType === "article"
               ? "http://localhost:8000/scrape-and-summarize"
               : "http://localhost:8000/analyze-video",
-            contentType === "article"
-              ? {
-                method: "POST",
-                body: formData,
-              }
-              : {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ url: articleUrl }),
-              },
+            {
+              method: "POST",
+              body: formData,
+            },
           );
         }
         if (!response) {
@@ -168,6 +162,20 @@ export default function Article() {
         }
         setIsSummaryLoading(false);
         // Request for AI perspective using the summary text
+      } catch (error) {
+        console.error("Error fetching article analysis:", error);
+        setIsSummaryLoading(false);
+        setIsPerspectiveLoading(false);
+      }
+    };
+    fetchData();
+  }, []);
+
+  useEffect(() => {
+    const generatePerspective = async () => {
+      if (!isSummaryLoading) {
+        console.log("summary", summary);
+
         const resPerspective = await fetch(
           "http://localhost:8000/generate-perspective",
           {
@@ -220,15 +228,10 @@ export default function Article() {
         }
 
         setIsChatInitialized(true);
-      } catch (error) {
-        console.error("Error fetching article analysis:", error);
-        setIsSummaryLoading(false);
-        setIsPerspectiveLoading(false);
       }
     };
-
-    fetchData();
-  }, [url, type]);
+    generatePerspective();
+  }, [isSummaryLoading]);
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
