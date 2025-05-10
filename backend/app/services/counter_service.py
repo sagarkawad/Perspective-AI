@@ -26,6 +26,8 @@ def generate_opposite_perspective(article_text):
                 "content": final_prompt
             }
         ],
+        "stream": True
+
     }
 
     response = requests.post(PERSPECTIVE_URL, headers=headers, json=payload)
