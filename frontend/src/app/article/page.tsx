@@ -184,53 +184,77 @@ export default function Article() {
             body: JSON.stringify({ summary: summary }),
           },
         );
-        const dataPerspective = await resPerspective.json();
-        console.log("Received perspective response:", dataPerspective);
-        setPerspective(dataPerspective.perspective);
-        setIsPerspectiveLoading(false);
+        if (!resPerspective) {
+          return;
+        }
+        if (!resPerspective.body) {
+          return;
+        }
 
-        // Initialize chat session
-        await fetch(`http://localhost:8000/initialize-chat`, {
+        const reader = resPerspective.body.getReader();
+        const decoder = new TextDecoder("utf-8");
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          const chunk = decoder.decode(value);
+          console.log("chunk - ", chunk);
+          setPerspective((prev) => prev + chunk);
+        }
+
+        // const dataPerspective = await resPerspective.json();
+        // console.log("Received perspective response:", dataPerspective);
+        // setPerspective(dataPerspective.perspective);
+        setIsPerspectiveLoading(false);
+      }
+    };
+    generatePerspective();
+  }, []);
+
+  useEffect(() => {
+    // Initialize chat session
+    async function generateChat() {
+      await fetch(`http://localhost:8000/initialize-chat`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          url: articleUrl,
+          summary: summary,
+          perspective: Perspective.perspective,
+          machine_id: getOrCreateMachineId(),
+        }),
+      });
+
+      // Fetch existing chat history
+      const historyResponse = await fetch(
+        `http://localhost:8000/chat-history`,
+        {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             url: articleUrl,
-            summary: summary,
-            perspective: dataPerspective.perspective,
             machine_id: getOrCreateMachineId(),
           }),
-        });
+        },
+      );
+      const historyData = await historyResponse.json();
 
-        // Fetch existing chat history
-        const historyResponse = await fetch(
-          `http://localhost:8000/chat-history`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              url: articleUrl,
-              machine_id: getOrCreateMachineId(),
-            }),
-          },
-        );
-        const historyData = await historyResponse.json();
-
-        // Always include the greeting message at the beginning
-        const greetingMessage = {
-          isAI: true,
-          message:
-            "Hello! I've analyzed the article. What would you like to know about it?",
-        };
-        if (historyData && historyData.length > 0) {
-          setChatHistory([greetingMessage, ...historyData]);
-        } else {
-          setChatHistory([greetingMessage]);
-        }
-
-        setIsChatInitialized(true);
+      // Always include the greeting message at the beginning
+      const greetingMessage = {
+        isAI: true,
+        message:
+          "Hello! I've analyzed the article. What would you like to know about it?",
+      };
+      if (historyData && historyData.length > 0) {
+        setChatHistory([greetingMessage, ...historyData]);
+      } else {
+        setChatHistory([greetingMessage]);
       }
-    };
-    generatePerspective();
+
+      setIsChatInitialized(true);
+    }
+    generateChat();
   }, [isSummaryLoading]);
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {

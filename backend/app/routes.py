@@ -76,9 +76,21 @@ class ChatHistoryRequest(BaseModel):
 @router.post("/generate-perspective")
 def generate_ai_perspective(request: ArticleRequest):
     try:
-        new_perspective = generate_opposite_perspective(request.summary)
-        logger.info("Generated perspective: %s", new_perspective)
-        return {"perspective": new_perspective}
+        # new_perspective = generate_opposite_perspective(request.summary)
+        # logger.info("Generated perspective: %s", new_perspective)
+        # return {"perspective": new_perspective}
+        # Create a generator function that will stream the summary
+        async def generate_perspective_chunks():
+            # Use your existing summarize_text_stream function
+            for chunk in generate_opposite_perspective(request.summary):
+                yield f"{chunk}"
+
+        # Return as a streaming response
+        return StreamingResponse(
+            generate_perspective_chunks(),
+            media_type="text/event-stream"
+        )
+
     except Exception as e:
         logger.error("Error in generate-perspective: %s", e)
         raise HTTPException(
