@@ -99,20 +99,20 @@ export default function Article() {
     const fetchData = async () => {
       try {
         // API request to get Deep Research
-        if (contentType === "article" || contentType === "video") {
-          const research_response = await fetch(
-            "http://localhost:8000/deep-research",
-            {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ url: articleUrl }),
-            },
-          );
-
-          const research_data = await research_response.json();
-          console.log(research_data.research);
-          setResearch(research_data.research);
-        }
+        // if (contentType === "article" || contentType === "video") {
+        //   const research_response = await fetch(
+        //     "http://localhost:8000/deep-research",
+        //     {
+        //       method: "POST",
+        //       headers: { "Content-Type": "application/json" },
+        //       body: JSON.stringify({ url: articleUrl }),
+        //     },
+        //   );
+        //
+        //   const research_data = await research_response.json();
+        //   console.log(research_data.research);
+        //   setResearch(research_data.research);
+        // }
 
         // Get article summary
         let response;
@@ -165,7 +165,6 @@ export default function Article() {
       } catch (error) {
         console.error("Error fetching article analysis:", error);
         setIsSummaryLoading(false);
-        setIsPerspectiveLoading(false);
       }
     };
     fetchData();
@@ -210,7 +209,7 @@ export default function Article() {
       }
     };
     generatePerspective();
-  }, []);
+  }, [isSummaryLoading]);
 
   useEffect(() => {
     // Initialize chat session
@@ -221,7 +220,7 @@ export default function Article() {
         body: JSON.stringify({
           url: articleUrl,
           summary: summary,
-          perspective: Perspective.perspective,
+          perspective: perspective,
           machine_id: getOrCreateMachineId(),
         }),
       });
@@ -255,7 +254,7 @@ export default function Article() {
       setIsChatInitialized(true);
     }
     generateChat();
-  }, [isSummaryLoading]);
+  }, [isPerspectiveLoading]);
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -379,10 +378,6 @@ export default function Article() {
           >
             <Tab
               label="AI Perspective"
-              sx={{ fontSize: "1.6rem", textTransform: "none", color: "white" }}
-            />
-            <Tab
-              label="Deep Research"
               sx={{ fontSize: "1.6rem", textTransform: "none", color: "white" }}
             />
           </Tabs>
@@ -543,15 +538,6 @@ export default function Article() {
                 </CardContent>
               </Card>
             </Stack>
-          )}
-          {tabIndex === 1 && research ? (
-            <ResearchDashboard data={research as SummaryData} />
-          ) : (
-            tabIndex === 1 && (
-              <div className="flex justify-center items-center h-full w-full mt-10">
-                <CircularProgress />
-              </div>
-            )
           )}{" "}
         </Container>
       </Box>
