@@ -88,6 +88,7 @@ def generate_ai_perspective(request: ArticleRequest):
         # Return as a streaming response
         return StreamingResponse(
             generate_perspective_chunks(),
+            # generate_perspective_chunks(),
             media_type="text/event-stream"
         )
 

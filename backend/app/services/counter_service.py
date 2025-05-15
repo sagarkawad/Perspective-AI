@@ -41,7 +41,7 @@ def generate_opposite_perspective(article_text):
             json=payload,
             stream=True
         )as response:
-            if response.status != 200:
+            if response.status_code != 200:
                 raise Exception(f"Opposite perspective error status code {
                                 response.status_code}")
 
