@@ -384,79 +384,79 @@ export default function Article() {
           {tabIndex === 0 && (
             <Stack spacing={6} className="mt-4">
               {/* Summary Section */}
-              {isSummaryLoading ? (
-                <Box
-                  display="flex"
-                  justifyContent="center"
-                  alignItems="center"
-                  sx={{ height: "150px" }}
-                >
-                  <CircularProgress color="primary" />
-                </Box>
-              ) : (
-                <Card sx={cardStyle}>
-                  <CardContent sx={{ p: 4 }}>
-                    <Typography
-                      variant="h5"
-                      fontWeight="bold"
-                      gutterBottom
-                      color="primary.main"
-                    >
-                      Article Summary
-                    </Typography>
-                    <TextToSpeech text={summary} />
+              {/* {isSummaryLoading ? ( */}
+              {/*   <Box */}
+              {/*     display="flex" */}
+              {/*     justifyContent="center" */}
+              {/*     alignItems="center" */}
+              {/*     sx={{ height: "150px" }} */}
+              {/*   > */}
+              {/*     <CircularProgress color="primary" /> */}
+              {/*   </Box> */}
+              {/* ) : ( */}
+              <Card sx={cardStyle}>
+                <CardContent sx={{ p: 4 }}>
+                  <Typography
+                    variant="h5"
+                    fontWeight="bold"
+                    gutterBottom
+                    color="primary.main"
+                  >
+                    Article Summary
+                  </Typography>
+                  <TextToSpeech text={summary} />
 
-                    <MarkdownRenderer content={summary} />
-                    <Typography
-                      variant="subtitle2"
-                      color="textSecondary"
-                      fontWeight="bold"
-                    >
-                      Source Article:
-                    </Typography>
-                    <Typography
-                      variant="body2"
-                      color="primary"
-                      component="a"
-                      href={url || "#"}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      sx={{ wordBreak: "break-word" }}
-                    >
-                      {url}
-                    </Typography>
-                  </CardContent>
-                </Card>
-              )}
+                  <MarkdownRenderer content={summary} />
+                  <Typography
+                    variant="subtitle2"
+                    color="textSecondary"
+                    fontWeight="bold"
+                  >
+                    Source Article:
+                  </Typography>
+                  <Typography
+                    variant="body2"
+                    color="primary"
+                    component="a"
+                    href={url || "#"}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    sx={{ wordBreak: "break-word" }}
+                  >
+                    {url}
+                  </Typography>
+                </CardContent>
+              </Card>
+              {/* )} */}
 
               {/* Perspective Section to render only the JSON snippet */}
-              {isPerspectiveLoading ? (
-                <Box
-                  display="flex"
-                  justifyContent="center"
-                  alignItems="center"
-                  sx={{ height: "150px" }}
-                >
-                  <CircularProgress color="primary" />
-                </Box>
-              ) : (
-                <Card sx={cardStyle}>
-                  <div className="p-4"></div>
-                  <CardContent sx={{ p: 4 }}>
-                    <Typography
-                      variant="h5"
-                      fontWeight="bold"
-                      gutterBottom
-                      color="primary.main"
-                    >
-                      AI Perspective
-                    </Typography>
-                    <TextToSpeech text={perspective} />
+              {/* {isPerspectiveLoading ? ( */}
+              {/* <Box */}
+              {/*   display="flex" */}
+              {/*   justifyContent="center" */}
+              {/*   alignItems="center" */}
+              {/*   sx={{ height: "150px" }} */}
+              {/* > */}
+              {/*   <CircularProgress color="primary" /> */}
+              {/* </Box> */}
+              {/* ) : ( */}
+              <Card sx={cardStyle}>
+                <div className="p-4"></div>
+                <CardContent sx={{ p: 4 }}>
+                  <Typography
+                    variant="h5"
+                    fontWeight="bold"
+                    gutterBottom
+                    color="primary.main"
+                  >
+                    AI Perspective
+                  </Typography>
+                  <TextToSpeech text={perspective} />
 
-                    <MarkdownRenderer content={perspective} />
-                  </CardContent>
-                </Card>
-              )}
+                  <MarkdownRenderer content={perspective} />
+                </CardContent>
+              </Card>
+              {/* )} */}
 
               {/* Discussion Section */}
               <Card sx={cardStyle}>
