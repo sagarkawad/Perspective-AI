@@ -1,6 +1,10 @@
-from .database import engine
-from .models import Base
+from tortoise import Tortoise
 
-def init_db():
+
+async def init_db():
     """Initialize the database by creating all tables."""
-    Base.metadata.create_all(bind=engine) 
+    await Tortoise.init(
+        db_url='sqlite://db.sqlite3',
+        modules={'models': ['app.db.models']}
+    )
+    await Tortoise.generate_schemas()

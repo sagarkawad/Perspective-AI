@@ -3,11 +3,12 @@ from app.routes import router
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 from app.db.init_db import init_db
+import asyncio
 
 app = FastAPI(title="Perspective AI", version="1.0.0")
 
 # Initialize database
-init_db()
+asyncio.run(init_db())
 
 app.add_middleware(
     CORSMiddleware,

@@ -1,12 +1,12 @@
 from datetime import datetime, timedelta
+import uuid
 from app.services.chat_service import create_chat_service
 from typing import Dict, Tuple, Optional
 from fastapi import HTTPException, Depends
-from app.db.database import SessionLocal, get_db
 from app.db.models import ChatSession, ChatMessage
-from sqlalchemy.orm import Session
 from app.services.voice_service import openai_voice
-import asyncio
+from tortoise.transactions import in_transaction
+from tortoise import fields
 
 
 class ChatManager:
@@ -25,35 +25,80 @@ class ChatManager:
         for url in urls_to_remove:
             del self.chat_services[url]
 
-    def initialize_chat(self, url: str, summary: str, perspective: str, machine_id: str) -> dict:
+    async def initialize_chat(
+        self,
+        url: str,
+        summary: str,
+        perspective: str,
+        machine_id: Optional[str] = None,
+        user_id: Optional[str] = None,
+    ) -> dict:
         """Initialize a new chat session"""
         self.cleanup_old_sessions()
 
         # Create database session
-        db = SessionLocal()
-        try:
-            # Create new session
-            new_session = ChatSession(
-                url=url,
-                summary=summary,
-                perspective=perspective,
-                machine_id=machine_id
-            )
-            db.add(new_session)
-            db.commit()
-            db.refresh(new_session)
-            session_id = new_session.id
+        async with in_transaction() as connection:
+            try:
+                # Associate or create user if provided
+                user = None
+                if user_id:
+                    from app.db.models import User
 
-            # Initialize chat service
-            chat_service = create_chat_service(summary, perspective)
-            self.chat_services[url] = (chat_service, datetime.now())
+                    user_obj, _ = await User.get_or_create(
+                        clerk_user_id=user_id, using_db=connection
+                    )
+                    user = user_obj
 
-            return {"status": "initialized", "session_id": session_id}
+                # First try to get existing session
+                if user:
+                    existing_session = await ChatSession.filter(
+                        user=user,
+                        url=url,
+                    ).using_db(connection).first()
+                else:
+                    existing_session = await ChatSession.filter(
+                        machine_id=machine_id,
+                        url=url,
+                    ).using_db(connection).first()
 
-        finally:
-            db.close()
+                if existing_session:
+                    # Update last_accessed if needed
+                    existing_session.last_accessed = datetime.now()
+                    await existing_session.save(using_db=connection)
+                    session_id = existing_session.id
+                else:
+                    # Create new session only if doesn't exist
+                    new_session = ChatSession(
+                        url=url,
+                        summary=summary,
+                        perspective=perspective,
+                        machine_id=machine_id,
+                        user=user,
+                    )
+                    await new_session.save(using_db=connection)
+                    session_id = new_session.id
 
-    def get_chat_response(self, url: str, question: str, thread_id: Optional[str] = None, machine_id: Optional[str] = None, vm: bool = True) -> dict:
+                # Initialize/retrieve chat service
+                if url not in self.chat_services:
+                    chat_service = create_chat_service(summary, perspective)
+                    self.chat_services[url] = (chat_service, datetime.now())
+
+                return {"status": "existing" if existing_session else "initialized",
+                        "session_id": session_id}
+
+            except Exception as e:
+                await connection.rollback()
+                raise e
+
+    async def get_chat_response(
+        self,
+        url: str,
+        question: str,
+        thread_id: Optional[str] = None,
+        machine_id: Optional[str] = None,
+        user_id: Optional[str] = None,
+        vm: bool = True,
+    ) -> dict:
         """Get response for a chat message"""
         self.cleanup_old_sessions()
 
@@ -61,88 +106,105 @@ class ChatManager:
             raise HTTPException(
                 status_code=404, detail="Chat session not found")
 
-        db = SessionLocal()
+        async with in_transaction() as connection:
+            try:
+                # Determine session filter by user or machine ID
+                if user_id:
+                    session = await ChatSession.filter(
+                        url=url,
+                        user__clerk_user_id=user_id,
+                    ).using_db(connection).first()
+                else:
+                    session = await ChatSession.filter(
+                        url=url,
+                        machine_id=machine_id,
+                    ).using_db(connection).first()
+                if not session:
+                    raise HTTPException(
+                        status_code=404, detail="Chat session not found"
+                    )
+                session.last_accessed = datetime.utcnow()
+                await session.save(using_db=connection)
 
-        try:
-            # Get session
-            session = db.query(ChatSession).filter(
-                ChatSession.url == url,
-                ChatSession.machine_id == machine_id
-            ).first()
+                if thread_id is None:
+                    thread_id = str(uuid.uuid4())
 
-            if not session:
-                raise HTTPException(
-                    status_code=404, detail="Chat session not found")
+                # Store user message
+                user_message = ChatMessage(
+                    session_id=session.id,
+                    thread_id=thread_id,
+                    is_ai=0,
+                    message=question
+                )
+                await user_message.save(using_db=connection)
 
-            # Update last accessed time
-            session.last_accessed = datetime.utcnow()
+                # Get AI response
+                chat_service, _ = self.chat_services[url]
+                response, thread_id = await chat_service.generate_response(
+                    question,
+                    thread_id,
+                    session_id=session.id,
+                )
+                # Store AI response
+                ai_message = ChatMessage(
+                    session_id=session.id,
+                    thread_id=thread_id,
+                    is_ai=1,
+                    message=response.content
+                )
+                await ai_message.save(using_db=connection)
 
-            # Store user message
-            user_message = ChatMessage(
-                session_id=session.id,
-                thread_id=thread_id,
-                is_ai=0,
-                message=question
-            )
-            db.add(user_message)
+                if vm:
+                    try:
+                        audio = openai_voice(response.content)
+                        return {"response": response.content, "thread_id": thread_id, "audio": audio}
+                    except Exception as e:
+                        print("err", e)
+                        return e
+                else:
+                    return {"response": response.content, "thread_id": thread_id}
+                # return {"response": response.content, "thread_id": thread_id}
 
-            # Get AI response
-            chat_service, _ = self.chat_services[url]
-            response, thread_id = chat_service.generate_response(
-                question, thread_id)
+            except Exception as e:
+                raise e
 
-            # Store AI response
-            ai_message = ChatMessage(
-                session_id=session.id,
-                thread_id=thread_id,
-                is_ai=1,
-                message=response.content
-            )
-            db.add(ai_message)
+    async def get_chat_history(
+        self,
+        url: str,
+        machine_id: Optional[str] = None,
+        user_id: Optional[str] = None,
+    ) -> list:
+        """Get chat history for a URL by user or machine ID"""
+        async with in_transaction() as connection:
+            try:
+                # Fetch the most recent session by user or machine
+                if user_id:
+                    session = await ChatSession.filter(
+                        user__clerk_user_id=user_id,
+                        url=url,
+                    ).order_by('-last_accessed').using_db(connection).first()
+                else:
+                    session = await ChatSession.filter(
+                        machine_id=machine_id,
+                        url=url,
+                    ).order_by('-last_accessed').using_db(connection).first()
 
-            db.commit()
-            if vm:
-                try:
-                    audio = openai_voice(response.content)
-                    return {"response": response.content, "thread_id": thread_id, "audio": audio}
-                except Exception as e:
-                    print("err", e)
-                    return e
-            else:
-                return {"response": response.content, "thread_id": thread_id}
-            # return {"response": response.content, "thread_id": thread_id}
+                if not session:
+                    return []
 
-        finally:
-            db.close()
+                messages = await ChatMessage.filter(session_id=session.id).order_by('timestamp').using_db(connection).all()
 
-    def get_chat_history(self, url: str, machine_id: str) -> list:
-        """Get chat history for a URL and machine ID"""
-        db = SessionLocal()
+                return [
+                    {
+                        "isAI": msg.is_ai == 1,
+                        "message": msg.message,
+                        "timestamp": msg.timestamp.isoformat()
+                    }
+                    for msg in messages
+                ]
 
-        try:
-            session = db.query(ChatSession).filter(
-                ChatSession.machine_id == machine_id,
-                ChatSession.url == url
-            ).first()
-
-            if not session:
-                return []
-
-            messages = db.query(ChatMessage).filter(
-                ChatMessage.session_id == session.id
-            ).order_by(ChatMessage.timestamp).all()
-
-            return [
-                {
-                    "isAI": msg.is_ai == 1,
-                    "message": msg.message,
-                    "timestamp": msg.timestamp.isoformat()
-                }
-                for msg in messages
-            ]
-
-        finally:
-            db.close()
+            except Exception as e:
+                raise e
 
 
 # Create a singleton instance

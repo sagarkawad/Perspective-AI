@@ -24,6 +24,7 @@ import MarkdownRenderer from "../components/MarkDownRenderer";
 import { getOrCreateMachineId } from "../utils/machineId";
 import { YouTubeEmbed } from "../components/ui/youtube-embed";
 import { useStore } from "@/zustand/states";
+import { useUser } from "@clerk/nextjs";
 
 export default function Article() {
   const [videoId, setVideoId] = useState(""); // Default video
@@ -38,6 +39,7 @@ export default function Article() {
   const [isSummaryLoading, setIsSummaryLoading] = useState(true);
   const [isPerspectiveLoading, setIsPerspectiveLoading] = useState(true);
   const { file, setFile } = useStore();
+  const { user } = useUser();
 
   const searchParams = useSearchParams();
   const articleUrl = searchParams.get("url");
@@ -214,16 +216,17 @@ export default function Article() {
   useEffect(() => {
     // Initialize chat session
     async function generateChat() {
-      await fetch(`http://localhost:8000/initialize-chat`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          url: articleUrl,
-          summary: summary,
-          perspective: perspective,
-          machine_id: getOrCreateMachineId(),
-        }),
-      });
+    await fetch(`http://localhost:8000/initialize-chat`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        url: articleUrl,
+        summary: summary,
+        perspective: perspective,
+        machine_id: getOrCreateMachineId(),
+        user_id: user?.id,
+      }),
+    });
 
       // Fetch existing chat history
       const historyResponse = await fetch(
@@ -231,10 +234,11 @@ export default function Article() {
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            url: articleUrl,
-            machine_id: getOrCreateMachineId(),
-          }),
+      body: JSON.stringify({
+        url: articleUrl,
+        machine_id: getOrCreateMachineId(),
+        user_id: user?.id,
+      }),
         },
       );
       const historyData = await historyResponse.json();
@@ -275,6 +279,7 @@ export default function Article() {
           question: userMessage,
           thread_id: threadId,
           machine_id: getOrCreateMachineId(),
+          user_id: user?.id,
           vm: true,
         }),
       });

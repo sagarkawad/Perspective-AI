@@ -1,31 +1,40 @@
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Text
-from sqlalchemy.orm import relationship
-from datetime import datetime
-from .database import Base
+from tortoise.models import Model
+from tortoise import fields
 
-class ChatSession(Base):
+
+class User(Model):
+    __tablename__ = "users"
+
+    id = fields.IntField(pk=True)
+    clerk_user_id = fields.CharField(max_length=255, unique=True, index=True)
+    created_at = fields.DatetimeField(auto_now_add=True)
+
+    sessions: fields.ReverseRelation["ChatSession"]
+
+
+class ChatSession(Model):
     __tablename__ = "chat_sessions"
 
-    id = Column(Integer, primary_key=True, index=True)
-    machine_id = Column(String(255), index=True)
-    url = Column(String(1000))
-    summary = Column(Text)
-    perspective = Column(Text)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    last_accessed = Column(DateTime, default=datetime.utcnow)
-    
-    # Relationship with messages
-    messages = relationship("ChatMessage", back_populates="session")
+    id = fields.IntField(primary_key=True, index=True)
+    user = fields.ForeignKeyField("models.User", related_name="sessions", null=True)
+    machine_id = fields.CharField(index=True, max_length=255, null=True)
+    url = fields.CharField(max_length=255)
+    summary = fields.TextField()
+    perspective = fields.TextField()
+    created_at = fields.DatetimeField(auto_now_add=True)
+    last_accessed = fields.DatetimeField(auto_now_add=True)
 
-class ChatMessage(Base):
+    class Meta:
+        unique_together = (("machine_id", "url"), ("user", "url"))
+
+
+class ChatMessage(Model):
     __tablename__ = "chat_messages"
 
-    id = Column(Integer, primary_key=True, index=True)
-    session_id = Column(Integer, ForeignKey("chat_sessions.id"))
-    thread_id = Column(String(255), index=True)
-    is_ai = Column(Integer, default=0)  # 0 for user, 1 for AI
-    message = Column(Text)
-    timestamp = Column(DateTime, default=datetime.utcnow)
-    
-    # Relationship with session
-    session = relationship("ChatSession", back_populates="messages")
+    id = fields.IntField(primary_key=True, index=True)
+    session = fields.ForeignKeyField(
+        "models.ChatSession", related_name="events")
+    thread_id = fields.CharField(index=True, max_length=255, null=True)
+    is_ai = fields.IntField(default=0)  # 0 for user, 1 for AI
+    message = fields.CharField(max_length=1024)
+    timestamp = fields.DatetimeField(auto_now_add=True)

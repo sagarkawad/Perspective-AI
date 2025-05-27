@@ -57,20 +57,23 @@ class InitializeChatRequest(BaseModel):
     url: str
     summary: str
     perspective: str
-    machine_id: str
+    machine_id: Optional[str] = None
+    user_id: Optional[str] = None
 
 
 class ChatRequest(BaseModel):
     url: str
     question: str
     thread_id: Optional[str] = None
-    machine_id: str
+    machine_id: Optional[str] = None
+    user_id: Optional[str] = None
     vm: bool
 
 
 class ChatHistoryRequest(BaseModel):
     url: str
-    machine_id: str  # Only required for chat history
+    machine_id: Optional[str] = None  # Only required for chat history
+    user_id: Optional[str] = None
 
 
 @router.post("/generate-perspective")
@@ -158,13 +161,13 @@ async def scrape_article(url: str = Form(None),
 
 @router.post("/related-topics")
 async def get_related_topics(request: RelatedTopicsRequest):
-    related_topics = generate_related_topics(request.summary)
+    related_topics = await generate_related_topics(request.summary)
     return {"topics": related_topics}
 
 
 @router.post("/deep-research")
 async def get_related_topics(request: ResearchURLRequest):
-    research = do_deep_research(request.url)
+    research = await do_deep_research(request.url)
     print("research")
     print(research)
     return {"research": research}
@@ -172,44 +175,50 @@ async def get_related_topics(request: ResearchURLRequest):
 
 @router.post("/analyze-video")
 async def analyze_video(request: VideoRequest):
-    video_text = get_transcription(request.url)
+    video_text = await get_transcription(request.url)
 
     if video_text["status"] == "error":
         return video_text  # Directly return the error message to the frontend
 
-    summary = summarize_text_stream({"inputs": video_text["text"]})
+    summary = await summarize_text_stream({"inputs": video_text["text"]})
     return {"status": "success", "summary": summary}
 
 
 @router.post("/initialize-chat")
 async def initialize_chat(request: InitializeChatRequest):
     """Initialize a new chat session."""
-    return chat_manager.initialize_chat(
+    return await chat_manager.initialize_chat(
         request.url,
         request.summary,
         request.perspective,
-        request.machine_id
+        request.machine_id,
+        request.user_id,
     )
 
 
 @router.post("/chat")
 async def chat(request: ChatRequest):
     """Get response for a chat message."""
-    return chat_manager.get_chat_response(
+    return await chat_manager.get_chat_response(
         request.url,
         request.question,
         request.thread_id,
         request.machine_id,
+        request.user_id,
         request.vm,
     )
 
 
 @router.post("/chat-history")
 async def get_chat_history(request: ChatHistoryRequest):
-    """Get chat history for the current machine and URL."""
-    if not request.machine_id:
+    """Get chat history for the current machine or user and URL."""
+    if not request.machine_id and not request.user_id:
         raise HTTPException(
             status_code=400,
-            detail="Machine ID is required for chat history"
+            detail="Machine ID or User ID is required for chat history"
         )
-    return chat_manager.get_chat_history(request.url, request.machine_id)
+    return await chat_manager.get_chat_history(
+        request.url,
+        request.machine_id,
+        request.user_id,
+    )

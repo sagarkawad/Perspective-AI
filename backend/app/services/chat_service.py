@@ -14,13 +14,14 @@ from langgraph.graph import END
 from langgraph.prebuilt import ToolNode, tools_condition
 from langgraph.checkpoint.memory import MemorySaver
 import uuid
-from app.db.database import SessionLocal
 from app.db.models import ChatMessage
+from tortoise.transactions import in_transaction
 
 
 # Load environment variables
 load_dotenv()
 openai_api_key = os.getenv("OPENAI_API_KEY")
+
 
 class ChatService:
     def __init__(self, content_summary: str, content_perspective: str):
@@ -33,17 +34,21 @@ class ChatService:
             openai_api_key=openai_api_key,
             model="text-embedding-3-small"
         )
-        self.vector_store = self._initialize_vector_store(content_summary, content_perspective)
+        self.vector_store = self._initialize_vector_store(
+            content_summary, content_perspective)
         self.graph = self._build_graph()
         self.content_summary = content_summary
         self.content_perspective = content_perspective
 
     def _initialize_vector_store(self, content_summary: str, content_perspective: str):
         vector_store = InMemoryVectorStore(self.embeddings)
-        custom_context = f"This is the summary of the article - {content_summary} and this is the opposite perspective for the article - {content_perspective}"
-        docs = [Document(page_content=custom_context, metadata={"source": "custom_input"})]
+        custom_context = f"This is the summary of the article - {
+            content_summary} and this is the opposite perspective for the article - {content_perspective}"
+        docs = [Document(page_content=custom_context,
+                         metadata={"source": "custom_input"})]
 
-        text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
+        text_splitter = RecursiveCharacterTextSplitter(
+            chunk_size=1000, chunk_overlap=200)
         all_splits = text_splitter.split_documents(docs)
         vector_store.add_documents(documents=all_splits)
         return vector_store
@@ -56,7 +61,8 @@ class ChatService:
         def retrieve(query: str):
             """Retrieve information related to a query."""
             article_aware_query = f"{query} related to the article's content"
-            retrieved_docs = self.vector_store.similarity_search(article_aware_query, k=2)
+            retrieved_docs = self.vector_store.similarity_search(
+                article_aware_query, k=2)
             serialized = "\n\n".join(
                 (f"Source: {doc.metadata}\n" f"Content: {doc.page_content}")
                 for doc in retrieved_docs
@@ -71,12 +77,11 @@ class ChatService:
             # MessagesState appends messages to state instead of overwriting
             return {"messages": [response]}
 
-
         # Step 2: Execute the retrieval.
         tools = ToolNode([retrieve])
 
-
         # Step 3: Generate a response using the retrieved content.
+
         def generate(state: MessagesState):
             """Generate answer."""
             # Get generated ToolMessages
@@ -111,7 +116,8 @@ class ChatService:
                 if message.type in ("human", "system")
                 or (message.type == "ai" and not message.tool_calls)
             ]
-            prompt = [SystemMessage(system_message_content)] + conversation_messages 
+            prompt = [SystemMessage(system_message_content)
+                      ] + conversation_messages
 
             # Run
             response = self.llm.invoke(prompt)
@@ -130,53 +136,46 @@ class ChatService:
         graph_builder.add_edge("tools", "generate")
         graph_builder.add_edge("generate", END)
 
-
         memory = MemorySaver()
         return graph_builder.compile(checkpointer=memory)
 
-    
-    def generate_response(self, user_question: str, thread_id=None):
+    async def generate_response(self, user_question: str, thread_id=None, session_id: int = None):
         # Use provided thread_id or create a new one if this is a new conversation
         if thread_id is None:
             thread_id = str(uuid.uuid4())
         config = {"configurable": {"thread_id": thread_id}}
-        
-        # Get chat history from the database
-        db = SessionLocal()
-        try:
-            # Get the most recent messages for this thread
-            messages = db.query(ChatMessage).filter(
-                ChatMessage.thread_id == thread_id
-            ).order_by(ChatMessage.timestamp).all()
-            
-            # Convert messages to the format expected by the LLM
-            conversation_history = [
-                {"role": "user" if not msg.is_ai else "assistant", "content": msg.message}
-                for msg in messages
-            ]
-            
-            # Add the current question
-            conversation_history.append({"role": "user", "content": user_question})
-            
-            result = self.graph.invoke(
-                {"messages": conversation_history},
-                config=config,
-            )
-            
-            # Store the new message in the database
-            new_message = ChatMessage(
-                thread_id=thread_id,
-                is_ai=1,
-                message=result["messages"][-1].content
-            )
-            db.add(new_message)
-            db.commit()
-            
-            return result["messages"][-1], thread_id
-            
-        finally:
-            db.close()
 
+        # Get chat history from the database
+        async with in_transaction() as connection:
+            try:
+                # Get messages ordered by timestamp
+                messages = await ChatMessage.filter(
+                    thread_id=thread_id
+                ).order_by('timestamp').using_db(connection).all()
+
+                # Convert messages to the format expected by the LLM
+                conversation_history = [
+                    {"role": "user" if not msg.is_ai else "assistant",
+                     "content": msg.message}
+                    for msg in messages
+                ]
+
+                # Add the current question
+                conversation_history.append(
+                    {"role": "user", "content": user_question})
+
+                result = await self.graph.ainvoke(
+                    {"messages": conversation_history},
+                    config=config,
+                )
+
+                return result["messages"][-1], thread_id
+
+            except Exception as e:
+                await connection.rollback()
+                raise e
 # Usage example:
+
+
 def create_chat_service(content_summary: str, content_perspective: str) -> ChatService:
     return ChatService(content_summary, content_perspective)

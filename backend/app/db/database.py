@@ -1,22 +1,15 @@
-from sqlalchemy import create_engine
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker
-import os
 
-# sqlite
-SQLALCHEMY_DATABASE_URL = "sqlite:///./chat_history.db"
+# from tortoise import Tortoise, run_async
 
-engine = create_engine(
-    SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False}
-)
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
-Base = declarative_base()
+# async def main():
+#     # Here we connect to a SQLite DB file.
+#     # also specify the app name of "models"
+#     # which contain models from "app.models
+#     await Tortoise.init(
+#         db_url='sqlite://db.sqlite3',
+#         modules={'models': ['app.models']}
+#     )
+#     await Tortoise.generate_schemas()
 
-# Dependency to get DB session
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
+# run_async(main())

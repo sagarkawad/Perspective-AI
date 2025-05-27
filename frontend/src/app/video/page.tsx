@@ -24,6 +24,7 @@ import ResearchDashboard from "../components/research-dashboard";
 import { SummaryData } from "../components/research-dashboard";
 import ChatMessage from "@/app/components/ChatMessage";
 import { getOrCreateMachineId } from "../utils/machineId";
+import { useUser } from "@clerk/nextjs";
 import MarkdownRenderer from "../components/MarkDownRenderer";
 
 export default function Home() {
@@ -52,6 +53,7 @@ export default function Home() {
 
   // Add new state for thread ID
   const [threadId, setThreadId] = useState<string | null>(null);
+  const { user } = useUser();
 
   // Update URL state when articleUrl changes
   useEffect(() => {
@@ -152,6 +154,7 @@ export default function Home() {
               summary: summaryText,
               perspective: dataPerspective.perspective,
               machine_id: getOrCreateMachineId(),
+              user_id: user?.id,
             }),
           });
 
@@ -164,6 +167,7 @@ export default function Home() {
               body: JSON.stringify({
                 url: articleUrl,
                 machine_id: getOrCreateMachineId(),
+                user_id: user?.id,
               }),
             },
           );
@@ -211,6 +215,7 @@ export default function Home() {
           question: userMessage,
           thread_id: threadId,
           machine_id: getOrCreateMachineId(),
+          user_id: user?.id,
         }),
       });
 
