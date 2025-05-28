@@ -75,6 +75,25 @@ class ChatHistoryRequest(BaseModel):
     machine_id: Optional[str] = None  # Only required for chat history
     user_id: Optional[str] = None
 
+class ArticleSessionRequest(BaseModel):
+    url: str
+    machine_id: Optional[str] = None
+    user_id: Optional[str] = None
+
+
+@router.post("/session")
+async def get_article_session(request: ArticleSessionRequest):
+    """Retrieve existing summary and perspective for a URL if previously processed, ignoring machine_id and user_id"""
+    from app.db.models import ChatSession
+
+    session = await ChatSession.filter(
+        url=request.url
+    ).order_by("-last_accessed").first()
+
+    if session:
+        return {"exists": True, "summary": session.summary, "perspective": session.perspective}
+    return {"exists": False}
+
 
 @router.post("/generate-perspective")
 def generate_ai_perspective(request: ArticleRequest):
@@ -109,22 +128,17 @@ def generate_ai_perspective(request: ArticleRequest):
 @router.post("/scrape-and-summarize")
 async def scrape_article(url: str = Form(None),
                          file: UploadFile = File(None)):
-    print("hello")
-    print("huhuh")
-    # print("content", article.content)
-    article_url = url
+    print("Received request for scrape-and-summarize")
+    print(f"URL: {url}")
+    print(f"File: {file}")
+    
     try:
         data = None
-        # if not article.url or not article.content:
-        #     raise HTTPException(status_code=422, detail="URL is required")
-
-        # Scrape the website
-        print(article_url)
-        if article_url:
-            print("DEBUG: Entering article_url block")
-            data = scrape_website(article_url)
+        if url:
+            print("DEBUG: Processing URL")
+            data = scrape_website(url)
         elif file:
-            print("DEBUG: Entering file")
+            print("DEBUG: Processing file")
             contents = await file.read()
             doc = fitz.open(stream=contents, filetype="pdf")
             text = ""
@@ -132,22 +146,30 @@ async def scrape_article(url: str = Form(None),
                 text += page.get_text()
             data = text
         else:
-            print("DEBUG: Entering else")
+            print("DEBUG: No URL or file provided")
+            logger.error("No URL or file provided")
+            raise HTTPException(
+                status_code=400, detail="Either URL or file must be provided")
 
-            logger.error(
-                "from the 3rd elif, Scraped data is None for URL: %s", article_url)
+        if not data:
+            logger.error("No data returned from scraping")
             raise HTTPException(
                 status_code=500, detail="Error scraping the article. No data returned.")
+
         logger.info("Scraped data: %s", data)
 
-    # Clean the data
+        # Clean the data
         clean = clean_scraped_data(data)
 
         # Create a generator function that will stream the summary
         async def generate_summary_chunks():
-            # Use your existing summarize_text_stream function
-            for chunk in summarize_text_stream({"inputs": clean}):
-                yield f"{chunk}"
+            try:
+                for chunk in summarize_text_stream({"inputs": clean}):
+                    if chunk:  # Only yield non-empty chunks
+                        yield f"data: {json.dumps({'chunk': chunk})}\n\n"
+            except Exception as e:
+                logger.error(f"Error in stream generation: {e}")
+                yield f"data: {json.dumps({'error': str(e)})}\n\n"
 
         # Return as a streaming response
         return StreamingResponse(
@@ -156,7 +178,7 @@ async def scrape_article(url: str = Form(None),
         )
     except Exception as e:
         logger.error("Error in scrape-and-summarize: %s", e, exc_info=True)
-        raise HTTPException(status_code=500, detail="Error processing the URL")
+        raise HTTPException(status_code=500, detail=f"Error processing the request: {str(e)}")
 
 
 @router.post("/related-topics")

@@ -12,10 +12,8 @@ const Card: React.FC<DescCardProps> = ({ title, description }) => {
   return (
     <StyledWrapper>
       <div className="card">
-        <div className="card2">
-          <h2 className='card-title'>{title}</h2>
-          <p className='card-description'>{description}</p>
-        </div>
+        <h2 className='card-title'>{title}</h2>
+        <p className='card-description'>{description}</p>
       </div>
     </StyledWrapper>
   );
@@ -23,44 +21,34 @@ const Card: React.FC<DescCardProps> = ({ title, description }) => {
 
 const StyledWrapper = styled.div`
   .card {
-    width: 220px;
-    height: 254px;
-    background-image: linear-gradient(163deg, #5F27CD 0%, #2563EB 100%);
-    border-radius: 20px;
-    transition: all .3s;
+    width: 100%;
+    min-height: 200px;
+    background-color: #fff;
+    border-radius: 12px;
+    padding: 24px;
+    transition: all 0.3s ease;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+    border: 1px solid #dfe6e9;
+    
+    &:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    }
   }
   
   .card-title {
-    color: #fff;
-    font-size: 24px;
-    font-weight: 400;
+    color: #2d3436;
+    font-size: 1.25rem;
+    font-weight: 600;
     text-align: center;
-    padding: 10px;
+    margin-bottom: 16px;
   }
   
   .card-description {
-    color: #fff;
-    font-size: 16px;
+    color: #636e72;
+    font-size: 0.95rem;
     text-align: center;
-    margin-top: 20px;
-    padding: 10px;
-  }
-
-  .card2 {
-    width: 190px;
-    height: 254px;
-    background-color: #1a1a1a;
-    border-radius: 20px;
-    transition: all .2s;
-  }
-
-  .card2:hover {
-    transform: scale(0.98);
-    border-radius: 20px;
-  }
-
-  .card:hover {
-    box-shadow: 0px 0px 30px 1px rgba(0, 255, 117, 0.30);
+    line-height: 1.6;
   }
 `;
 

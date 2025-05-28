@@ -1,36 +1,225 @@
-'use client';
+"use client";
 
-import Link from 'next/link';
-import { AppBar, Toolbar, Typography, IconButton, Box } from '@mui/material';
-import { Brain } from 'lucide-react';
-import NavbarButtons from './Utils/NavbarButtons';
+import Link from "next/link";
+import {
+  AppBar,
+  Toolbar,
+  Typography,
+  IconButton,
+  Box,
+  useTheme,
+  useMediaQuery,
+  Drawer,
+  List,
+  ListItem,
+  ListItemText,
+  ListItemIcon,
+} from "@mui/material";
+import { Brain, Menu, Home, Github } from "lucide-react";
+import {
+  SignInButton,
+  SignUpButton,
+  SignedIn,
+  SignedOut,
+  UserButton,
+} from "@clerk/nextjs";
+import { useState } from "react";
 
 const Navbar = () => {
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+  const [mobileOpen, setMobileOpen] = useState(false);
+
+  const handleDrawerToggle = () => {
+    setMobileOpen(!mobileOpen);
+  };
+
+  const navItems = [
+    { text: "Home", href: "/", icon: <Home size={20} /> },
+    { 
+      text: "GitHub", 
+      href: "https://github.com/AOSSIE-Org/Perspective-AI",
+      icon: <Github size={20} />
+    },
+  ];
+
+  const drawer = (
+    <Box onClick={handleDrawerToggle} sx={{ textAlign: "center" }}>
+      <List>
+        {navItems.map((item) => (
+          <ListItem 
+            key={item.text} 
+            component={Link} 
+            href={item.href}
+            sx={{ 
+              color: "#4a5568",
+              transition: "all 0.2s ease",
+              "&:hover": {
+                backgroundColor: "#f7fafc",
+                transform: "translateX(4px)"
+              }
+            }}
+          >
+            <ListItemIcon sx={{ color: "#4a5568" }}>
+              {item.icon}
+            </ListItemIcon>
+            <ListItemText primary={item.text} />
+          </ListItem>
+        ))}
+        <SignedOut>
+          <ListItem>
+            <SignInButton mode="modal" />
+          </ListItem>
+          <ListItem>
+            <SignUpButton mode="modal" />
+          </ListItem>
+        </SignedOut>
+        <SignedIn>
+          <ListItem>
+            <UserButton />
+          </ListItem>
+        </SignedIn>
+      </List>
+    </Box>
+  );
+
   return (
     <AppBar
       position="static"
-      sx={{ bgcolor: '#5F27CD', boxShadow: 3 }}
-      className="w-full mt-0 p-4"
+      elevation={0}
+      sx={{ 
+        bgcolor: "rgba(255, 255, 255, 0.8)",
+        backdropFilter: "blur(8px)",
+        borderBottom: "1px solid #e2e8f0",
+      }}
     >
-      <Toolbar sx={{ display: 'flex', justifyContent: 'space-between' }}>
+      <Toolbar sx={{ 
+        display: "flex", 
+        justifyContent: "space-between",
+        px: { xs: 2, sm: 3, md: 4 }
+      }}>
         <Box
           display="flex"
           alignItems="center"
           component={Link}
           href="/"
-          sx={{ textDecoration: 'none', color: 'inherit' }}
+          sx={{ 
+            textDecoration: "none", 
+            color: "#2d3748",
+            transition: "all 0.3s ease",
+            "&:hover": {
+              opacity: 0.8,
+              transform: "scale(1.02)"
+            }
+          }}
         >
-          <IconButton edge="start" color="inherit" aria-label="logo" sx={{ mr: 1 }}>
-            <Brain size={32} />
+          <IconButton
+            edge="start"
+            aria-label="logo"
+            sx={{ 
+              mr: 1,
+              color: "#4a5568",
+              transition: "all 0.3s ease",
+              "&:hover": {
+                backgroundColor: "#f7fafc",
+                transform: "rotate(15deg)"
+              }
+            }}
+          >
+            <Brain size={28} />
           </IconButton>
-          <Typography variant="h5" fontWeight="bold">
+          <Typography 
+            variant="h6" 
+            fontWeight="500"
+            sx={{
+              fontSize: { xs: "1.1rem", sm: "1.25rem" },
+              background: "linear-gradient(45deg, #4a5568, #2d3748)",
+              WebkitBackgroundClip: "text",
+              WebkitTextFillColor: "transparent",
+            }}
+          >
             Perspective AI
           </Typography>
         </Box>
-        <Box display="flex" gap={2}>
-          <NavbarButtons text="Home" href="/" />
-          <NavbarButtons text="GitHub" href="https://github.com/AOSSIE-Org/Perspective-AI" />
-        </Box>
+
+        {isMobile ? (
+          <>
+            <IconButton
+              color="inherit"
+              aria-label="open drawer"
+              edge="start"
+              onClick={handleDrawerToggle}
+              sx={{ 
+                color: "#4a5568",
+                transition: "all 0.3s ease",
+                "&:hover": {
+                  backgroundColor: "#f7fafc",
+                  transform: "rotate(90deg)"
+                }
+              }}
+            >
+              <Menu />
+            </IconButton>
+            <Drawer
+              variant="temporary"
+              anchor="right"
+              open={mobileOpen}
+              onClose={handleDrawerToggle}
+              ModalProps={{
+                keepMounted: true,
+              }}
+              sx={{
+                "& .MuiDrawer-paper": { 
+                  boxSizing: "border-box", 
+                  width: 240,
+                  bgcolor: "rgba(255, 255, 255, 0.9)",
+                  backdropFilter: "blur(8px)",
+                },
+              }}
+            >
+              {drawer}
+            </Drawer>
+          </>
+        ) : (
+          <Box display="flex" gap={2} alignItems="center">
+            {navItems.map((item) => (
+              <Link
+                key={item.text}
+                href={item.href}
+                style={{
+                  textDecoration: "none",
+                  color: "#4a5568",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "4px",
+                  padding: "8px 12px",
+                  borderRadius: "6px",
+                  transition: "all 0.3s ease",
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor = "#f7fafc";
+                  e.currentTarget.style.transform = "translateY(-2px)";
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = "transparent";
+                  e.currentTarget.style.transform = "translateY(0)";
+                }}
+              >
+                {item.icon}
+                <Typography variant="body2" fontWeight="500">
+                  {item.text}
+                </Typography>
+              </Link>
+            ))}
+            <SignedOut>
+              <SignInButton mode="modal" />
+              <SignUpButton mode="modal" />
+            </SignedOut>
+            <SignedIn>
+              <UserButton />
+            </SignedIn>
+          </Box>
+        )}
       </Toolbar>
     </AppBar>
   );

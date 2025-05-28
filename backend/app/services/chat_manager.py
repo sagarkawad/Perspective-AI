@@ -15,6 +15,13 @@ class ChatManager:
         self.MAX_INACTIVE_TIME = timedelta(hours=24)
         self.MAX_SESSIONS = 1000
 
+    def _get_session_key(
+        self, url: str, machine_id: Optional[str] = None, user_id: Optional[str] = None
+    ) -> str:
+        """Compute the key for chat_services based on the URL and machine_id or user_id."""
+        identifier = user_id or machine_id
+        return f"{url}:{identifier}"
+
     def cleanup_old_sessions(self):
         """Remove chat sessions that haven't been accessed recently"""
         current_time = datetime.now()
@@ -49,12 +56,20 @@ class ChatManager:
                     )
                     user = user_obj
 
-                # First try to get existing session
+                existing_session = None
                 if user:
                     existing_session = await ChatSession.filter(
                         user=user,
                         url=url,
                     ).using_db(connection).first()
+                    if not existing_session and machine_id:
+                        existing_session = await ChatSession.filter(
+                            machine_id=machine_id,
+                            url=url,
+                        ).using_db(connection).first()
+                    if existing_session:
+                        existing_session.user = user
+                        existing_session.machine_id = None
                 else:
                     existing_session = await ChatSession.filter(
                         machine_id=machine_id,
@@ -62,8 +77,9 @@ class ChatManager:
                     ).using_db(connection).first()
 
                 if existing_session:
-                    # Update last_accessed if needed
                     existing_session.last_accessed = datetime.now()
+                    existing_session.summary = summary
+                    existing_session.perspective = perspective
                     await existing_session.save(using_db=connection)
                     session_id = existing_session.id
                 else:
@@ -78,10 +94,11 @@ class ChatManager:
                     await new_session.save(using_db=connection)
                     session_id = new_session.id
 
-                # Initialize/retrieve chat service
-                if url not in self.chat_services:
+                session_key = self._get_session_key(url, machine_id, user_id)
+                if session_key not in self.chat_services:
                     chat_service = create_chat_service(summary, perspective)
-                    self.chat_services[url] = (chat_service, datetime.now())
+                    self.chat_services[session_key] = (
+                        chat_service, datetime.now())
 
                 return {"status": "existing" if existing_session else "initialized",
                         "session_id": session_id}
@@ -102,7 +119,8 @@ class ChatManager:
         """Get response for a chat message"""
         self.cleanup_old_sessions()
 
-        if url not in self.chat_services:
+        session_key = self._get_session_key(url, machine_id, user_id)
+        if session_key not in self.chat_services:
             raise HTTPException(
                 status_code=404, detail="Chat session not found")
 
@@ -139,7 +157,9 @@ class ChatManager:
                 await user_message.save(using_db=connection)
 
                 # Get AI response
-                chat_service, _ = self.chat_services[url]
+                chat_service, _ = self.chat_services[session_key]
+                self.chat_services[session_key] = (
+                    chat_service, datetime.now())
                 response, thread_id = await chat_service.generate_response(
                     question,
                     thread_id,

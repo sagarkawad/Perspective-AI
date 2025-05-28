@@ -12,19 +12,19 @@ import {
   CircularProgress,
   Tab,
   Tabs,
+  IconButton,
 } from "@mui/material";
 import ChatMessage from "@/app/components/ChatMessage";
 import Navbar from "@/app/components/Navbar";
 import { useSearchParams } from "next/navigation";
 import TextToSpeech from "../components/TextToSpeech";
-import RelatedTopicsSidebar from "../components/RelatedTopicsSidebar";
-import ResearchDashboard from "../components/research-dashboard";
-import { SummaryData } from "../components/research-dashboard";
 import MarkdownRenderer from "../components/MarkDownRenderer";
 import { getOrCreateMachineId } from "../utils/machineId";
 import { YouTubeEmbed } from "../components/ui/youtube-embed";
 import { useStore } from "@/zustand/states";
 import { useUser } from "@clerk/nextjs";
+import CloseIcon from '@mui/icons-material/Close';
+import ChatIcon from '@mui/icons-material/Chat';
 
 export default function Article() {
   const [videoId, setVideoId] = useState(""); // Default video
@@ -38,13 +38,15 @@ export default function Article() {
   const [perspective, setPerspective] = useState("");
   const [isSummaryLoading, setIsSummaryLoading] = useState(true);
   const [isPerspectiveLoading, setIsPerspectiveLoading] = useState(true);
-  const { file, setFile } = useStore();
+  const [sessionChecked, setSessionChecked] = useState(false);
+  const [sessionExists, setSessionExists] = useState(false);
+  const { file } = useStore();
   const { user } = useUser();
+  const [isChatOpen, setIsChatOpen] = useState(true);
 
   const searchParams = useSearchParams();
   const articleUrl = searchParams.get("url");
   const contentType = searchParams.get("type");
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   // Add new state for chat history
   const [chatHistory, setChatHistory] = useState<
@@ -56,66 +58,40 @@ export default function Article() {
   // Add new state for thread ID
   const [threadId, setThreadId] = useState<string | null>(null);
 
-  const handleSidebarToggle = (isOpen: boolean) => {
-    setIsSidebarOpen(isOpen);
-  };
-
-  // Update URL state when articleUrl changes
   useEffect(() => {
-    setUrl(articleUrl);
-    setType(contentType);
-    console.log("type", contentType);
-  }, []);
-
-  useEffect(() => {
-    console.log("inside use effect", articleUrl);
-    console.log("inside use effect", contentType);
-
-    if (url) {
-      const id = extractVideoId(url);
-      if (id) {
-        setVideoId(id);
+    if (!articleUrl) return;
+    const fetchSessionData = async () => {
+      try {
+        const res = await fetch("http://localhost:8000/session", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            url: articleUrl,
+            machine_id: getOrCreateMachineId(),
+            user_id: user?.id,
+          }),
+        });
+        const data = await res.json();
+        if (data.exists) {
+          setSummary(data.summary);
+          setPerspective(data.perspective);
+          setIsSummaryLoading(false);
+          setIsPerspectiveLoading(false);
+          setSessionExists(true);
+        }
+      } catch (error) {
+        console.error("Error fetching session data:", error);
+      } finally {
+        setSessionChecked(true);
       }
-    }
-  }, [url]);
-
-  // Helper function to extract video ID from various YouTube URLs
-  function extractVideoId(link: string): string | null {
-    try {
-      const urlObj = new URL(link);
-      // For youtu.be links, the pathname is the video id
-      if (urlObj.hostname === "youtu.be") {
-        return urlObj.pathname.slice(1);
-      }
-      // For youtube.com links, the video id is usually in the "v" parameter
-      if (urlObj.hostname.includes("youtube.com")) {
-        return urlObj.searchParams.get("v");
-      }
-    } catch (error) {
-      console.error("Error extracting video id:", error);
-    }
-    return null;
-  }
+    };
+    fetchSessionData();
+  }, [articleUrl, user]);
 
   useEffect(() => {
+    if (!sessionChecked || sessionExists) return;
     const fetchData = async () => {
       try {
-        // API request to get Deep Research
-        // if (contentType === "article" || contentType === "video") {
-        //   const research_response = await fetch(
-        //     "http://localhost:8000/deep-research",
-        //     {
-        //       method: "POST",
-        //       headers: { "Content-Type": "application/json" },
-        //       body: JSON.stringify({ url: articleUrl }),
-        //     },
-        //   );
-        //
-        //   const research_data = await research_response.json();
-        //   console.log(research_data.research);
-        //   setResearch(research_data.research);
-        // }
-
         // Get article summary
         let response;
         if (contentType === "pdf") {
@@ -132,6 +108,7 @@ export default function Article() {
             );
           }
         } else {
+          // For articles and videos, send URL as form data
           const formData = new FormData();
           formData.append("url", articleUrl as string);
           response = await fetch(
@@ -145,34 +122,54 @@ export default function Article() {
           );
         }
         if (!response) {
+          console.error("No response received");
           return;
         }
         if (!response.body) {
+          console.error("No response body");
           return;
         }
 
         const reader = response.body.getReader();
         const decoder = new TextDecoder("utf-8");
+        let buffer = "";
 
         while (true) {
           const { done, value } = await reader.read();
           if (done) break;
 
-          const chunk = decoder.decode(value);
-          console.log("chunk - ", chunk);
-          setSummary((prev) => prev + chunk);
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split("\n");
+          buffer = lines.pop() || ""; // Keep the last incomplete line in the buffer
+
+          for (const line of lines) {
+            if (line.startsWith("data: ")) {
+              try {
+                const data = JSON.parse(line.slice(6));
+                if (data.error) {
+                  console.error("Stream error:", data.error);
+                  continue;
+                }
+                if (data.chunk) {
+                  setSummary((prev) => prev + data.chunk);
+                }
+              } catch (e) {
+                console.error("Error parsing stream data:", e);
+              }
+            }
+          }
         }
         setIsSummaryLoading(false);
-        // Request for AI perspective using the summary text
       } catch (error) {
         console.error("Error fetching article analysis:", error);
         setIsSummaryLoading(false);
       }
     };
     fetchData();
-  }, []);
+  }, [sessionChecked, sessionExists, contentType, articleUrl, file]);
 
   useEffect(() => {
+    if (sessionExists) return;
     const generatePerspective = async () => {
       if (!isSummaryLoading) {
         console.log("summary", summary);
@@ -211,50 +208,44 @@ export default function Article() {
       }
     };
     generatePerspective();
-  }, [isSummaryLoading]);
+  }, [isSummaryLoading, sessionExists]);
 
   useEffect(() => {
-    // Initialize chat session
+    if (isPerspectiveLoading) return;
     async function generateChat() {
-    await fetch(`http://localhost:8000/initialize-chat`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        url: articleUrl,
-        summary: summary,
-        perspective: perspective,
-        machine_id: getOrCreateMachineId(),
-        user_id: user?.id,
-      }),
-    });
+      await fetch(`http://localhost:8000/initialize-chat`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          url: articleUrl,
+          summary: summary,
+          perspective: perspective,
+          machine_id: getOrCreateMachineId(),
+          user_id: user?.id,
+        }),
+      });
 
-      // Fetch existing chat history
-      const historyResponse = await fetch(
-        `http://localhost:8000/chat-history`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        url: articleUrl,
-        machine_id: getOrCreateMachineId(),
-        user_id: user?.id,
-      }),
-        },
-      );
+      const historyResponse = await fetch(`http://localhost:8000/chat-history`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          url: articleUrl,
+          machine_id: getOrCreateMachineId(),
+          user_id: user?.id,
+        }),
+      });
       const historyData = await historyResponse.json();
 
-      // Always include the greeting message at the beginning
       const greetingMessage = {
         isAI: true,
         message:
           "Hello! I've analyzed the article. What would you like to know about it?",
       };
-      if (historyData && historyData.length > 0) {
-        setChatHistory([greetingMessage, ...historyData]);
-      } else {
-        setChatHistory([greetingMessage]);
-      }
-
+      setChatHistory(
+        historyData && historyData.length > 0
+          ? [greetingMessage, ...historyData]
+          : [greetingMessage]
+      );
       setIsChatInitialized(true);
     }
     generateChat();
@@ -337,14 +328,28 @@ export default function Article() {
   };
 
   const cardStyle = {
-    bgcolor: "white",
-    boxShadow: 3,
-    borderRadius: "20px",
-    "& .MuiCardContent-root": { borderRadius: "20px" },
+    bgcolor: "rgba(255, 255, 255, 0.95)",
+    backdropFilter: "blur(10px)",
+    boxShadow: "0 4px 16px rgba(0, 0, 0, 0.1)",
+    borderRadius: "16px",
+    border: "1px solid rgba(0, 0, 0, 0.05)",
+    transition: "all 0.3s ease",
+    "&:hover": {
+      transform: "translateY(-2px)",
+      boxShadow: "0 8px 24px rgba(0, 0, 0, 0.12)",
+    },
+    "& .MuiCardContent-root": { 
+      borderRadius: "16px",
+      p: 3 
+    },
   };
 
-  const handleTabChange = (event: React.SyntheticEvent, newValue: number) => {
-    setTabIndex(newValue);
+  const loadingContainerStyle = {
+    display: "flex",
+    justifyContent: "center",
+    alignItems: "center",
+    minHeight: "200px",
+    width: "100%",
   };
 
   return (
@@ -352,206 +357,238 @@ export default function Article() {
       <Navbar />
       <Box
         sx={{
-          bgcolor: "#111827",
-          background:
-            "linear-gradient(90deg, rgba(7, 0, 40, 1) 0%, rgba(23, 6, 66, 1) 50%, rgba(19, 0, 47, 1) 100%)",
-          color: "white",
+          bgcolor: "#f8fafc",
           minHeight: "100vh",
-          py: 8,
+          display: "flex",
+          flexDirection: { xs: "column", lg: "row" },
+          position: "relative",
+          color: "#1e293b",
         }}
       >
-        {type === "video" ? <YouTubeEmbed videoId={videoId} /> : null}
-
-        <Container
-          maxWidth="lg"
+        {/* Left side - Content */}
+        <Box
           sx={{
-            flexGrow: 1,
-            pt: 4,
-            transition: "transform 0.3s ease",
-            transform: isSidebarOpen ? "translateX(-190px)" : "translateX(0)",
+            flex: 1,
+            p: { xs: 2, md: 4 },
+            overflowY: "auto",
+            maxHeight: { xs: "100vh", lg: "100vh" },
+            width: { xs: "100%", lg: isChatOpen ? "calc(100% - 400px)" : "100%" },
+            transition: "all 0.3s ease",
+            maxWidth: { lg: isChatOpen ? "calc(100% - 400px)" : "100%" },
+            mx: { lg: 0 },
+            pr: { lg: isChatOpen ? 4 : 4 },
+            pl: { lg: 4 },
+            pb: { xs: isChatOpen ? "40vh" : "80px" },
           }}
         >
-          <Tabs
-            value={tabIndex}
-            onChange={handleTabChange}
-            centered
-            textColor="inherit"
-            indicatorColor="primary"
+          {/* Chat Toggle Button */}
+          <IconButton
+            onClick={() => setIsChatOpen(!isChatOpen)}
             sx={{
-              borderBottom: "2px solid rgba(255, 255, 255, 0.2)",
+              position: "fixed",
+              right: { xs: 16, lg: isChatOpen ? 416 : 16 },
+              top: { xs: isChatOpen ? "auto" : "auto", lg: "80px" },
+              bottom: { xs: isChatOpen ? "calc(40vh + 16px)" : 16, lg: "auto" },
+              zIndex: 1000,
+              bgcolor: "#3b82f6",
+              color: "white",
+              "&:hover": {
+                bgcolor: "#2563eb",
+              },
+              width: 40,
+              height: 40,
+              boxShadow: "0 2px 8px rgba(0,0,0,0.1)",
             }}
           >
-            <Tab
-              label="AI Perspective"
-              sx={{ fontSize: "1.6rem", textTransform: "none", color: "white" }}
-            />
-          </Tabs>
-          {tabIndex === 0 && (
-            <Stack spacing={6} className="mt-4">
-              {/* Summary Section */}
-              {/* {isSummaryLoading ? ( */}
-              {/*   <Box */}
-              {/*     display="flex" */}
-              {/*     justifyContent="center" */}
-              {/*     alignItems="center" */}
-              {/*     sx={{ height: "150px" }} */}
-              {/*   > */}
-              {/*     <CircularProgress color="primary" /> */}
-              {/*   </Box> */}
-              {/* ) : ( */}
-              <Card sx={cardStyle}>
-                <CardContent sx={{ p: 4 }}>
-                  <Typography
-                    variant="h5"
-                    fontWeight="bold"
-                    gutterBottom
-                    color="primary.main"
-                  >
-                    Article Summary
-                  </Typography>
-                  <TextToSpeech text={summary} />
+            {isChatOpen ? <CloseIcon /> : <ChatIcon />}
+          </IconButton>
 
-                  <MarkdownRenderer content={summary} />
-                  <Typography
-                    variant="subtitle2"
-                    color="textSecondary"
-                    fontWeight="bold"
-                  >
-                    Source Article:
-                  </Typography>
-                  <Typography
-                    variant="body2"
-                    color="primary"
-                    component="a"
-                    href={url || "#"}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    sx={{ wordBreak: "break-word" }}
-                  >
-                    {url}
-                  </Typography>
-                </CardContent>
-              </Card>
-              {/* )} */}
+          {type === "video" && (
+            <Box sx={{ mb: 4, maxWidth: "100%", overflow: "hidden" }}>
+              <YouTubeEmbed videoId={videoId} />
+            </Box>
+          )}
 
-              {/* Perspective Section to render only the JSON snippet */}
-              {/* {isPerspectiveLoading ? ( */}
-              {/* <Box */}
-              {/*   display="flex" */}
-              {/*   justifyContent="center" */}
-              {/*   alignItems="center" */}
-              {/*   sx={{ height: "150px" }} */}
-              {/* > */}
-              {/*   <CircularProgress color="primary" /> */}
-              {/* </Box> */}
-              {/* ) : ( */}
-              <Card sx={cardStyle}>
-                <div className="p-4"></div>
-                <CardContent sx={{ p: 4 }}>
-                  <Typography
-                    variant="h5"
-                    fontWeight="bold"
-                    gutterBottom
-                    color="primary.main"
-                  >
-                    AI Perspective
-                  </Typography>
-                  <TextToSpeech text={perspective} />
-
-                  <MarkdownRenderer content={perspective} />
-                </CardContent>
-              </Card>
-              {/* )} */}
-
-              {/* Discussion Section */}
-              <Card sx={cardStyle}>
-                <CardContent
-                  sx={{
-                    p: 4,
-                    flexGrow: 1,
-                    display: "flex",
-                    flexDirection: "column",
-                  }}
+          <Stack spacing={3} sx={{ maxWidth: "100%", width: "100%" }}>
+            {/* Summary Section */}
+            <Card sx={{ ...cardStyle, width: "100%", ml: 0 }}>
+              <CardContent>
+                <Typography
+                  variant="h5"
+                  fontWeight="bold"
+                  gutterBottom
+                  color="#3b82f6"
+                  sx={{ mb: 2 }}
                 >
-                  <Typography
-                    variant="h5"
-                    fontWeight="bold"
-                    gutterBottom
-                    color="primary.main"
-                  >
-                    Discussion
-                  </Typography>
-                  <Box
-                    sx={{
-                      flexGrow: 1,
-                      overflowY: "auto",
-                      maxHeight: 400,
-                      mb: 3,
-                      borderRadius: "16px",
-                    }}
-                  >
-                    {chatHistory.map((chat, index) => (
-                      <ChatMessage
-                        key={index}
-                        isAI={chat.isAI}
-                        message={chat.message}
-                      />
-                    ))}
-                    {isLoading && (
-                      <Box display="flex" justifyContent="center" my={2}>
-                        <CircularProgress size={24} />
-                      </Box>
-                    )}
+                  Article Summary
+                </Typography>
+                {isSummaryLoading ? (
+                  <Box sx={loadingContainerStyle}>
+                    <CircularProgress color="primary" size={40} />
                   </Box>
-                  <Box
-                    component="form"
-                    onSubmit={handleSubmit}
-                    display="flex"
-                    gap={2}
-                  >
-                    <TextField
-                      fullWidth
-                      variant="outlined"
-                      placeholder="Ask a question about the article..."
-                      value={message}
-                      onChange={(e) => setMessage(e.target.value)}
-                      sx={{
-                        "& .MuiOutlinedInput-root": {
-                          borderRadius: "12px",
-                        },
-                      }}
-                    />
-                    <Button
-                      type="submit"
-                      variant="contained"
-                      color="primary"
-                      sx={{ borderRadius: "12px", px: 4 }}
-                      disabled={isLoading || !isChatInitialized}
-                    >
-                      Send
-                    </Button>
-                    <Button
-                      type="submit"
-                      variant="contained"
-                      color="primary"
-                      sx={{ borderRadius: "12px", px: 4 }}
-                      disabled={isLoading || !isChatInitialized}
-                    >
-                      VM
-                    </Button>
+                ) : (
+                  <>
+                    <TextToSpeech text={summary} />
+                    <MarkdownRenderer content={summary} />
+                    <Box sx={{ mt: 2, pt: 2, borderTop: "1px solid rgba(0, 0, 0, 0.1)" }}>
+                      <Typography
+                        variant="subtitle2"
+                        color="text.secondary"
+                        fontWeight="bold"
+                      >
+                        Source Article:
+                      </Typography>
+                      <Typography
+                        variant="body2"
+                        color="#3b82f6"
+                        component="a"
+                        href={url || "#"}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        sx={{ 
+                          wordBreak: "break-word",
+                          textDecoration: "none",
+                          "&:hover": {
+                            textDecoration: "underline",
+                          }
+                        }}
+                      >
+                        {url}
+                      </Typography>
+                    </Box>
+                  </>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Perspective Section */}
+            <Card sx={{ ...cardStyle, width: "100%", ml: 0 }}>
+              <CardContent>
+                <Typography
+                  variant="h5"
+                  fontWeight="bold"
+                  gutterBottom
+                  color="#3b82f6"
+                  sx={{ mb: 2 }}
+                >
+                  AI Perspective
+                </Typography>
+                {isPerspectiveLoading ? (
+                  <Box sx={loadingContainerStyle}>
+                    <CircularProgress color="primary" size={40} />
                   </Box>
-                </CardContent>
-              </Card>
-            </Stack>
-          )}{" "}
-        </Container>
+                ) : (
+                  <>
+                    <TextToSpeech text={perspective} />
+                    <MarkdownRenderer content={perspective} />
+                  </>
+                )}
+              </CardContent>
+            </Card>
+          </Stack>
+        </Box>
+
+        {/* Right side - Chat */}
+        <Box
+          sx={{
+            width: { xs: "100%", lg: "400px" },
+            height: { xs: "40vh", lg: "100vh" },
+            borderLeft: { lg: "1px solid rgba(0, 0, 0, 0.1)" },
+            display: "flex",
+            flexDirection: "column",
+            bgcolor: "white",
+            position: { xs: "fixed", lg: "fixed" },
+            bottom: 0,
+            right: 0,
+            transform: { xs: isChatOpen ? "translateY(0)" : "translateY(100%)", lg: isChatOpen ? "translateX(0)" : "translateX(100%)" },
+            transition: "all 0.3s ease",
+            zIndex: 900,
+            boxShadow: { xs: "0 -4px 16px rgba(0, 0, 0, 0.1)", lg: "-4px 0 16px rgba(0, 0, 0, 0.1)" },
+          }}
+        >
+          {/* Chat Messages */}
+          <Box
+            sx={{
+              flexGrow: 1,
+              overflowY: "auto",
+              p: 2,
+              display: "flex",
+              flexDirection: "column",
+              gap: 2,
+              bgcolor: "#f8fafc",
+            }}
+          >
+            {chatHistory.map((chat, index) => (
+              <ChatMessage
+                key={index}
+                isAI={chat.isAI}
+                message={chat.message}
+              />
+            ))}
+            {isLoading && (
+              <Box display="flex" justifyContent="center" my={2}>
+                <CircularProgress size={24} />
+              </Box>
+            )}
+          </Box>
+
+          {/* Chat Input */}
+          <Box
+            component="form"
+            onSubmit={handleSubmit}
+            sx={{
+              p: 2,
+              borderTop: "1px solid rgba(0, 0, 0, 0.1)",
+              bgcolor: "white",
+            }}
+          >
+            <Box sx={{ display: "flex", gap: 1 }}>
+              <TextField
+                fullWidth
+                variant="outlined"
+                placeholder="Ask a question about the article..."
+                value={message}
+                onChange={(e) => setMessage(e.target.value)}
+                sx={{
+                  "& .MuiOutlinedInput-root": {
+                    borderRadius: "12px",
+                    bgcolor: "#f8fafc",
+                    "& fieldset": {
+                      borderColor: "rgba(0, 0, 0, 0.1)",
+                    },
+                    "&:hover fieldset": {
+                      borderColor: "rgba(0, 0, 0, 0.2)",
+                    },
+                    "&.Mui-focused fieldset": {
+                      borderColor: "#3b82f6",
+                    },
+                  },
+                  "& .MuiInputBase-input": {
+                    color: "#1e293b",
+                  },
+                }}
+              />
+              <Button
+                type="submit"
+                variant="contained"
+                color="primary"
+                sx={{ 
+                  borderRadius: "12px",
+                  minWidth: "auto",
+                  px: 2,
+                  bgcolor: "#3b82f6",
+                  "&:hover": {
+                    bgcolor: "#2563eb",
+                  }
+                }}
+                disabled={isLoading || !isChatInitialized}
+              >
+                Send
+              </Button>
+            </Box>
+          </Box>
+        </Box>
       </Box>
-      {/* Related Topics Sidebar */}
-      <RelatedTopicsSidebar
-        currentArticleUrl={url || undefined}
-        currentArticleSummary={summary || undefined}
-        onSidebarToggle={handleSidebarToggle}
-      />
     </>
   );
 }
