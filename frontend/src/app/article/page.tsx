@@ -23,8 +23,8 @@ import { getOrCreateMachineId } from "../utils/machineId";
 import { YouTubeEmbed } from "../components/ui/youtube-embed";
 import { useStore } from "@/zustand/states";
 import { useUser } from "@clerk/nextjs";
-import CloseIcon from '@mui/icons-material/Close';
-import ChatIcon from '@mui/icons-material/Chat';
+import CloseIcon from "@mui/icons-material/Close";
+import ChatIcon from "@mui/icons-material/Chat";
 
 export default function Article() {
   const [videoId, setVideoId] = useState(""); // Default video
@@ -35,11 +35,12 @@ export default function Article() {
   const [research, setResearch] = useState();
   // States for API responses and loading flags
   const [summary, setSummary] = useState("");
+  const [summaryCompleted, setIsSummaryCompleted] = useState(false);
   const [perspective, setPerspective] = useState("");
-  const [isSummaryLoading, setIsSummaryLoading] = useState(true);
-  const [isPerspectiveLoading, setIsPerspectiveLoading] = useState(true);
+  const [perspectiveCompleted, setIsPerspectiveCompleted] = useState(false);
   const [sessionChecked, setSessionChecked] = useState(false);
   const [sessionExists, setSessionExists] = useState(false);
+  const [isGeneratingPerspective, setIsGeneratingPerspective] = useState(false);
   const { file } = useStore();
   const { user } = useUser();
   const [isChatOpen, setIsChatOpen] = useState(true);
@@ -58,6 +59,16 @@ export default function Article() {
   // Add new state for thread ID
   const [threadId, setThreadId] = useState<string | null>(null);
 
+  // Set URL and type when component mounts
+  useEffect(() => {
+    if (articleUrl) {
+      setUrl(articleUrl);
+    }
+    if (contentType) {
+      setType(contentType);
+    }
+  }, [articleUrl, contentType]);
+
   useEffect(() => {
     if (!articleUrl) return;
     const fetchSessionData = async () => {
@@ -75,9 +86,9 @@ export default function Article() {
         if (data.exists) {
           setSummary(data.summary);
           setPerspective(data.perspective);
-          setIsSummaryLoading(false);
-          setIsPerspectiveLoading(false);
           setSessionExists(true);
+          setIsSummaryCompleted(true);
+          setIsPerspectiveCompleted(true);
         }
       } catch (error) {
         console.error("Error fetching session data:", error);
@@ -89,7 +100,8 @@ export default function Article() {
   }, [articleUrl, user]);
 
   useEffect(() => {
-    if (!sessionChecked || sessionExists) return;
+    if (sessionExists || !articleUrl) return;
+
     const fetchData = async () => {
       try {
         // Get article summary
@@ -110,7 +122,7 @@ export default function Article() {
         } else {
           // For articles and videos, send URL as form data
           const formData = new FormData();
-          formData.append("url", articleUrl as string);
+          formData.append("url", articleUrl);
           response = await fetch(
             contentType === "article"
               ? "http://localhost:8000/scrape-and-summarize"
@@ -159,10 +171,10 @@ export default function Article() {
             }
           }
         }
-        setIsSummaryLoading(false);
       } catch (error) {
         console.error("Error fetching article analysis:", error);
-        setIsSummaryLoading(false);
+      } finally {
+        setIsSummaryCompleted(true);
       }
     };
     fetchData();
@@ -170,10 +182,11 @@ export default function Article() {
 
   useEffect(() => {
     if (sessionExists) return;
-    const generatePerspective = async () => {
-      if (!isSummaryLoading) {
-        console.log("summary", summary);
 
+    const generatePerspective = async () => {
+      try {
+        setPerspective(""); // Reset perspective before generating new one
+        console.log("Generating perspective for summary:", summary);
         const resPerspective = await fetch(
           "http://localhost:8000/generate-perspective",
           {
@@ -182,74 +195,92 @@ export default function Article() {
             body: JSON.stringify({ summary: summary }),
           },
         );
-        if (!resPerspective) {
-          return;
-        }
-        if (!resPerspective.body) {
-          return;
+
+        if (!resPerspective.ok) {
+          throw new Error(`HTTP error! status: ${resPerspective.status}`);
         }
 
-        const reader = resPerspective.body.getReader();
-        const decoder = new TextDecoder("utf-8");
+        const reader = resPerspective.body?.getReader();
+        if (!reader) {
+          throw new Error("No reader available");
+        }
+
+        const decoder = new TextDecoder();
+        let buffer = "";
 
         while (true) {
           const { done, value } = await reader.read();
           if (done) break;
 
-          const chunk = decoder.decode(value);
-          console.log("chunk - ", chunk);
-          setPerspective((prev) => prev + chunk);
-        }
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split("\n");
+          buffer = lines.pop() || ""; // Keep the last incomplete line in the buffer
 
-        // const dataPerspective = await resPerspective.json();
-        // console.log("Received perspective response:", dataPerspective);
-        // setPerspective(dataPerspective.perspective);
-        setIsPerspectiveLoading(false);
+          for (const line of lines) {
+            if (line.trim()) {
+              setPerspective((prev) => prev + line);
+            }
+          }
+        }
+      } catch (error) {
+        console.error("Error generating perspective:", error);
+      } finally {
+        setIsPerspectiveCompleted(true);
       }
     };
+
     generatePerspective();
-  }, [isSummaryLoading, sessionExists]);
+  }, [articleUrl, setIsSummaryCompleted]);
 
   useEffect(() => {
-    if (isPerspectiveLoading) return;
-    async function generateChat() {
-      await fetch(`http://localhost:8000/initialize-chat`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          url: articleUrl,
-          summary: summary,
-          perspective: perspective,
-          machine_id: getOrCreateMachineId(),
-          user_id: user?.id,
-        }),
-      });
+    if (!summary || !perspective || !articleUrl || !user) return;
 
-      const historyResponse = await fetch(`http://localhost:8000/chat-history`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          url: articleUrl,
-          machine_id: getOrCreateMachineId(),
-          user_id: user?.id,
-        }),
-      });
-      const historyData = await historyResponse.json();
+    const initializeChat = async () => {
+      try {
+        await fetch(`http://localhost:8000/initialize-chat`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            url: articleUrl,
+            summary: summary,
+            perspective: perspective,
+            machine_id: getOrCreateMachineId(),
+            user_id: user.id,
+          }),
+        });
 
-      const greetingMessage = {
-        isAI: true,
-        message:
-          "Hello! I've analyzed the article. What would you like to know about it?",
-      };
-      setChatHistory(
-        historyData && historyData.length > 0
-          ? [greetingMessage, ...historyData]
-          : [greetingMessage]
-      );
-      setIsChatInitialized(true);
-    }
-    generateChat();
-  }, [isPerspectiveLoading]);
+        const historyResponse = await fetch(
+          `http://localhost:8000/chat-history`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              url: articleUrl,
+              machine_id: getOrCreateMachineId(),
+              user_id: user.id,
+            }),
+          },
+        );
+        const historyData = await historyResponse.json();
+
+        const greetingMessage = {
+          isAI: true,
+          message:
+            "Hello! I've analyzed the article. What would you like to know about it?",
+        };
+        setChatHistory(
+          historyData && historyData.length > 0
+            ? [greetingMessage, ...historyData]
+            : [greetingMessage],
+        );
+        setIsChatInitialized(true);
+      } catch (error) {
+        console.error("Error initializing chat:", error);
+      }
+    };
+
+    initializeChat();
+  }, [summaryCompleted, perspectiveCompleted, articleUrl, user]);
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -338,18 +369,10 @@ export default function Article() {
       transform: "translateY(-2px)",
       boxShadow: "0 8px 24px rgba(0, 0, 0, 0.12)",
     },
-    "& .MuiCardContent-root": { 
+    "& .MuiCardContent-root": {
       borderRadius: "16px",
-      p: 3 
+      p: 3,
     },
-  };
-
-  const loadingContainerStyle = {
-    display: "flex",
-    justifyContent: "center",
-    alignItems: "center",
-    minHeight: "200px",
-    width: "100%",
   };
 
   return (
@@ -372,7 +395,10 @@ export default function Article() {
             p: { xs: 2, md: 4 },
             overflowY: "auto",
             maxHeight: { xs: "100vh", lg: "100vh" },
-            width: { xs: "100%", lg: isChatOpen ? "calc(100% - 400px)" : "100%" },
+            width: {
+              xs: "100%",
+              lg: isChatOpen ? "calc(100% - 400px)" : "100%",
+            },
             transition: "all 0.3s ease",
             maxWidth: { lg: isChatOpen ? "calc(100% - 400px)" : "100%" },
             mx: { lg: 0 },
@@ -422,42 +448,40 @@ export default function Article() {
                 >
                   Article Summary
                 </Typography>
-                {isSummaryLoading ? (
-                  <Box sx={loadingContainerStyle}>
-                    <CircularProgress color="primary" size={40} />
-                  </Box>
-                ) : (
-                  <>
-                    <TextToSpeech text={summary} />
-                    <MarkdownRenderer content={summary} />
-                    <Box sx={{ mt: 2, pt: 2, borderTop: "1px solid rgba(0, 0, 0, 0.1)" }}>
-                      <Typography
-                        variant="subtitle2"
-                        color="text.secondary"
-                        fontWeight="bold"
-                      >
-                        Source Article:
-                      </Typography>
-                      <Typography
-                        variant="body2"
-                        color="#3b82f6"
-                        component="a"
-                        href={url || "#"}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        sx={{ 
-                          wordBreak: "break-word",
-                          textDecoration: "none",
-                          "&:hover": {
-                            textDecoration: "underline",
-                          }
-                        }}
-                      >
-                        {url}
-                      </Typography>
-                    </Box>
-                  </>
-                )}
+                <TextToSpeech text={summary} />
+                <MarkdownRenderer content={summary} />
+                <Box
+                  sx={{
+                    mt: 2,
+                    pt: 2,
+                    borderTop: "1px solid rgba(0, 0, 0, 0.1)",
+                  }}
+                >
+                  <Typography
+                    variant="subtitle2"
+                    color="text.secondary"
+                    fontWeight="bold"
+                  >
+                    Source Article:
+                  </Typography>
+                  <Typography
+                    variant="body2"
+                    color="#3b82f6"
+                    component="a"
+                    href={url || "#"}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    sx={{
+                      wordBreak: "break-word",
+                      textDecoration: "none",
+                      "&:hover": {
+                        textDecoration: "underline",
+                      },
+                    }}
+                  >
+                    {url}
+                  </Typography>
+                </Box>
               </CardContent>
             </Card>
 
@@ -473,16 +497,8 @@ export default function Article() {
                 >
                   AI Perspective
                 </Typography>
-                {isPerspectiveLoading ? (
-                  <Box sx={loadingContainerStyle}>
-                    <CircularProgress color="primary" size={40} />
-                  </Box>
-                ) : (
-                  <>
-                    <TextToSpeech text={perspective} />
-                    <MarkdownRenderer content={perspective} />
-                  </>
-                )}
+                <TextToSpeech text={perspective} />
+                <MarkdownRenderer content={perspective} />
               </CardContent>
             </Card>
           </Stack>
@@ -500,10 +516,16 @@ export default function Article() {
             position: { xs: "fixed", lg: "fixed" },
             bottom: 0,
             right: 0,
-            transform: { xs: isChatOpen ? "translateY(0)" : "translateY(100%)", lg: isChatOpen ? "translateX(0)" : "translateX(100%)" },
+            transform: {
+              xs: isChatOpen ? "translateY(0)" : "translateY(100%)",
+              lg: isChatOpen ? "translateX(0)" : "translateX(100%)",
+            },
             transition: "all 0.3s ease",
             zIndex: 900,
-            boxShadow: { xs: "0 -4px 16px rgba(0, 0, 0, 0.1)", lg: "-4px 0 16px rgba(0, 0, 0, 0.1)" },
+            boxShadow: {
+              xs: "0 -4px 16px rgba(0, 0, 0, 0.1)",
+              lg: "-4px 0 16px rgba(0, 0, 0, 0.1)",
+            },
           }}
         >
           {/* Chat Messages */}
@@ -572,14 +594,14 @@ export default function Article() {
                 type="submit"
                 variant="contained"
                 color="primary"
-                sx={{ 
+                sx={{
                   borderRadius: "12px",
                   minWidth: "auto",
                   px: 2,
                   bgcolor: "#3b82f6",
                   "&:hover": {
                     bgcolor: "#2563eb",
-                  }
+                  },
                 }}
                 disabled={isLoading || !isChatInitialized}
               >

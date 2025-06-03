@@ -15,7 +15,6 @@ logger = logging.getLogger("uvicorn.error")
 
 def generate_opposite_perspective(article_text):
     try:
-
         final_prompt = get_opposite_perspective_prompt(article_text)
 
         stream = client.chat.completions.create(
@@ -28,9 +27,22 @@ def generate_opposite_perspective(article_text):
             ],
             stream=True,
         )
+        
+        current_chunk = ""
         for chunk in stream:
             if chunk.choices[0].delta.content is not None:
-                yield chunk.choices[0].delta.content
+                content = chunk.choices[0].delta.content
+                current_chunk += content
+                
+                # Yield when we have a complete sentence or paragraph
+                if any(char in content for char in ['.', '!', '?', '\n']):
+                    yield current_chunk
+                    current_chunk = ""
+        
+        # Yield any remaining content
+        if current_chunk:
+            yield current_chunk
+            
     except Exception as e:
         logger.error(f"Error in perspective service: {e}")
         raise Exception("Error in perspective service: " + str(e))

@@ -7,6 +7,7 @@ class User(Model):
 
     id = fields.IntField(pk=True)
     clerk_user_id = fields.CharField(max_length=255, unique=True, index=True)
+    credit = fields.IntField(default=100)
     created_at = fields.DatetimeField(auto_now_add=True)
 
     sessions: fields.ReverseRelation["ChatSession"]
@@ -16,7 +17,8 @@ class ChatSession(Model):
     __tablename__ = "chat_sessions"
 
     id = fields.IntField(primary_key=True, index=True)
-    user = fields.ForeignKeyField("models.User", related_name="sessions", null=True)
+    user = fields.ForeignKeyField(
+        "models.User", related_name="sessions", null=True)
     machine_id = fields.CharField(index=True, max_length=255, null=True)
     url = fields.CharField(max_length=255)
     summary = fields.TextField()

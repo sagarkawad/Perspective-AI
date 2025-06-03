@@ -75,6 +75,7 @@ class ChatHistoryRequest(BaseModel):
     machine_id: Optional[str] = None  # Only required for chat history
     user_id: Optional[str] = None
 
+
 class ArticleSessionRequest(BaseModel):
     url: str
     machine_id: Optional[str] = None
@@ -98,19 +99,13 @@ async def get_article_session(request: ArticleSessionRequest):
 @router.post("/generate-perspective")
 def generate_ai_perspective(request: ArticleRequest):
     try:
-        # new_perspective = generate_opposite_perspective(request.summary)
-        # logger.info("Generated perspective: %s", new_perspective)
-        # return {"perspective": new_perspective}
-        # Create a generator function that will stream the summary
         async def generate_perspective_chunks():
-            # Use your existing summarize_text_stream function
             for chunk in generate_opposite_perspective(request.summary):
-                yield f"{chunk}"
+                if chunk:  # Only yield non-empty chunks
+                    yield f"{chunk}\n"
 
-        # Return as a streaming response
         return StreamingResponse(
             generate_perspective_chunks(),
-            # generate_perspective_chunks(),
             media_type="text/event-stream"
         )
 
@@ -131,7 +126,7 @@ async def scrape_article(url: str = Form(None),
     print("Received request for scrape-and-summarize")
     print(f"URL: {url}")
     print(f"File: {file}")
-    
+
     try:
         data = None
         if url:
@@ -178,7 +173,8 @@ async def scrape_article(url: str = Form(None),
         )
     except Exception as e:
         logger.error("Error in scrape-and-summarize: %s", e, exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Error processing the request: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"Error processing the request: {str(e)}")
 
 
 @router.post("/related-topics")
