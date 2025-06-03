@@ -174,15 +174,7 @@ class ChatManager:
                 )
                 await ai_message.save(using_db=connection)
 
-                if vm:
-                    try:
-                        audio = openai_voice(response.content)
-                        return {"response": response.content, "thread_id": thread_id, "audio": audio}
-                    except Exception as e:
-                        print("err", e)
-                        return e
-                else:
-                    return {"response": response.content, "thread_id": thread_id}
+                return {"response": response.content, "thread_id": thread_id}
                 # return {"response": response.content, "thread_id": thread_id}
 
             except Exception as e:

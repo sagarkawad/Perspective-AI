@@ -32,6 +32,8 @@ export default function Home() {
   const [message, setMessage] = useState("");
   const [url, setUrl] = useState<string | null>(null);
   const [tabIndex, setTabIndex] = useState(0);
+  const [sessionChecked, setSessionChecked] = useState(false);
+  const [sessionExists, setSessionExists] = useState(false);
 
   // States for API responses and loading flags
   const [summary, setSummary] = useState("");
@@ -90,9 +92,39 @@ export default function Home() {
   }
 
   useEffect(() => {
-    if (articleUrl) {
-      const fetchData = async () => {
-        try {
+    if (!articleUrl) return;
+    const fetchSessionData = async () => {
+      try {
+        const res = await fetch("http://localhost:8000/session", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            url: articleUrl,
+            machine_id: getOrCreateMachineId(),
+            user_id: user?.id,
+          }),
+        });
+        const data = await res.json();
+        if (data.exists) {
+          setSummary(data.summary);
+          setPerspective(data.perspective);
+          setSessionExists(true);
+          setIsSummaryLoading(false);
+          setIsPerspectiveLoading(false);
+        }
+      } catch (error) {
+        console.error("Error fetching session data:", error);
+      } finally {
+        setSessionChecked(true);
+      }
+    };
+    fetchSessionData();
+  }, [articleUrl, user]);
+  
+  useEffect(() => {
+    if (!sessionChecked || sessionExists || !articleUrl) return;
+    const fetchData = async () => {
+      try {
           // API request to get Deep Research
           const research_response = await fetch(
             "http://localhost:8000/deep-research",
@@ -192,9 +224,8 @@ export default function Home() {
           setIsPerspectiveLoading(false);
         }
       };
-      fetchData();
-    }
-  }, [articleUrl]);
+    fetchData();
+  }, [sessionChecked, sessionExists, articleUrl]);
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -216,6 +247,7 @@ export default function Home() {
           thread_id: threadId,
           machine_id: getOrCreateMachineId(),
           user_id: user?.id,
+          vm: false,
         }),
       });
 
@@ -321,7 +353,7 @@ export default function Home() {
                     >
                       Error
                     </Typography>
-                    <Typography variant="body1" paragraph>
+                    <Typography variant="body1" component="div" gutterBottom>
                       {errorMessage}
                     </Typography>
                   </CardContent>
@@ -338,7 +370,7 @@ export default function Home() {
                       Video Summary
                     </Typography>
                     <TextToSpeech text={summary} />
-                    <Typography variant="body1" paragraph>
+                    <Typography variant="body1" component="div" gutterBottom>
                       <MarkdownRenderer content={summary} />
                     </Typography>
                     <CardFooter className="pt-1">
@@ -385,8 +417,10 @@ export default function Home() {
                       >
                         AI Perspective
                       </Typography>
-                      <TextToSpeech text={perspective} />
+                    <TextToSpeech text={perspective} />
+                    <Typography variant="body1" component="div" gutterBottom>
                       <MarkdownRenderer content={perspective} />
+                    </Typography>
                     </CardContent>
                   </Card>
                 ))}

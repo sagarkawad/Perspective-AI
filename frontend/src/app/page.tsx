@@ -15,6 +15,8 @@ import {
 import Navbar from "@/app/components/Navbar";
 import AnalyzeButton from "@/app/components/Utils/AnalyzeButton";
 import { useStore } from "@/zustand/states";
+import { getOrCreateMachineId } from "@/app/utils/machineId";
+import { useUser } from "@clerk/nextjs";
 import { motion } from "framer-motion";
 
 // Define proper TypeScript interfaces
@@ -36,14 +38,39 @@ const Home = () => {
 
   const { file, setFile } = useStore();
 
-  const handleSubmit = useCallback(() => {
+  const { user } = useUser();
+  const handleSubmit = useCallback(async () => {
+    let entry;
+    if (file) {
+      entry = { type: "pdf", name: file.name };
+    } else {
+      if (!article_url.trim()) return;
+      entry = { type: selectedType, url: article_url };
+    }
+
+    try {
+      await fetch("http://localhost:8000/history/save", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: entry.type,
+          url: entry.url,
+          name: entry.name,
+          machine_id: getOrCreateMachineId(),
+          user_id: user?.id,
+        }),
+      });
+    } catch (err) {
+      console.error("Error saving history:", err);
+    }
+
     if (file) {
       router.push(`/article?type=pdf`);
+    } else {
+      const encodedURL = encodeURIComponent(article_url);
+      router.push(`/article?url=${encodedURL}&type=${selectedType}`);
     }
-    if (!article_url.trim()) return;
-    const encodedURL = encodeURIComponent(article_url);
-    router.push(`/article?url=${encodedURL}&type=${selectedType}`);
-  }, [article_url, router, selectedType, file]);
+  }, [article_url, router, selectedType, file, user]);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {

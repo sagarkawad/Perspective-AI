@@ -40,3 +40,15 @@ class ChatMessage(Model):
     is_ai = fields.IntField(default=0)  # 0 for user, 1 for AI
     message = fields.CharField(max_length=1024)
     timestamp = fields.DatetimeField(auto_now_add=True)
+
+
+class HistoryEntry(Model):
+    __tablename__ = "history_entries"
+
+    id = fields.IntField(pk=True)
+    user = fields.ForeignKeyField("models.User", related_name="history_entries", null=True)
+    machine_id = fields.CharField(max_length=255, null=True, index=True)
+    type = fields.CharField(max_length=20)
+    url = fields.CharField(max_length=255, null=True)
+    name = fields.CharField(max_length=255, null=True)
+    created_at = fields.DatetimeField(auto_now_add=True)

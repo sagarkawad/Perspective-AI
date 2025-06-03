@@ -100,7 +100,7 @@ export default function Article() {
   }, [articleUrl, user]);
 
   useEffect(() => {
-    if (sessionExists || !articleUrl) return;
+    if (!sessionChecked || sessionExists || !articleUrl) return;
 
     const fetchData = async () => {
       try {
@@ -145,6 +145,7 @@ export default function Article() {
         const reader = response.body.getReader();
         const decoder = new TextDecoder("utf-8");
         let buffer = "";
+        let summaryVar = "";
 
         while (true) {
           const { done, value } = await reader.read();
@@ -164,6 +165,7 @@ export default function Article() {
                 }
                 if (data.chunk) {
                   setSummary((prev) => prev + data.chunk);
+                  summaryVar = summaryVar + data.chunk;
                 }
               } catch (e) {
                 console.error("Error parsing stream data:", e);
@@ -171,6 +173,52 @@ export default function Article() {
             }
           }
         }
+        const generatePerspective = async () => {
+          try {
+            setPerspective("");
+            console.log("Generating perspective for summary:", summaryVar);
+            const resPerspective = await fetch(
+              "http://localhost:8000/generate-perspective",
+              {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ summary: summaryVar }),
+              },
+            );
+
+            if (!resPerspective.ok) {
+              throw new Error(`HTTP error! status: ${resPerspective.status}`);
+            }
+
+            const reader2 = resPerspective.body?.getReader();
+            if (!reader2) {
+              throw new Error("No reader available");
+            }
+
+            const decoder2 = new TextDecoder();
+            let buf2 = "";
+
+            while (true) {
+              const { done: done2, value: value2 } = await reader2.read();
+              if (done2) break;
+
+              buf2 += decoder2.decode(value2, { stream: true });
+              const lines2 = buf2.split("\n");
+              buf2 = lines2.pop() || "";
+
+              for (const line2 of lines2) {
+                if (line2.trim()) {
+                  setPerspective((prev) => prev + line2);
+                }
+              }
+            }
+          } catch (err) {
+            console.error("Error generating perspective:", err);
+          } finally {
+            setIsPerspectiveCompleted(true);
+          }
+        };
+        await generatePerspective();
       } catch (error) {
         console.error("Error fetching article analysis:", error);
       } finally {
@@ -179,58 +227,6 @@ export default function Article() {
     };
     fetchData();
   }, [sessionChecked, sessionExists, contentType, articleUrl, file]);
-
-  useEffect(() => {
-    if (sessionExists) return;
-
-    const generatePerspective = async () => {
-      try {
-        setPerspective(""); // Reset perspective before generating new one
-        console.log("Generating perspective for summary:", summary);
-        const resPerspective = await fetch(
-          "http://localhost:8000/generate-perspective",
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ summary: summary }),
-          },
-        );
-
-        if (!resPerspective.ok) {
-          throw new Error(`HTTP error! status: ${resPerspective.status}`);
-        }
-
-        const reader = resPerspective.body?.getReader();
-        if (!reader) {
-          throw new Error("No reader available");
-        }
-
-        const decoder = new TextDecoder();
-        let buffer = "";
-
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-
-          buffer += decoder.decode(value, { stream: true });
-          const lines = buffer.split("\n");
-          buffer = lines.pop() || ""; // Keep the last incomplete line in the buffer
-
-          for (const line of lines) {
-            if (line.trim()) {
-              setPerspective((prev) => prev + line);
-            }
-          }
-        }
-      } catch (error) {
-        console.error("Error generating perspective:", error);
-      } finally {
-        setIsPerspectiveCompleted(true);
-      }
-    };
-
-    generatePerspective();
-  }, [articleUrl, setIsSummaryCompleted]);
 
   useEffect(() => {
     if (!summary || !perspective || !articleUrl || !user) return;
@@ -302,7 +298,7 @@ export default function Article() {
           thread_id: threadId,
           machine_id: getOrCreateMachineId(),
           user_id: user?.id,
-          vm: true,
+          vm: false,
         }),
       });
 
@@ -318,10 +314,6 @@ export default function Article() {
         ...prev,
         { isAI: true, message: data.response },
       ]);
-      // Play the audio if audio data is present
-      if (data.audio) {
-        playAudio(data.audio);
-      }
     } catch (error) {
       console.error("Error in chat:", error);
       setChatHistory((prev) => [
@@ -337,26 +329,26 @@ export default function Article() {
   };
 
   // Helper function to play base64 audio
-  const playAudio = (base64Audio: string) => {
-    // Create a new Audio object with the data URL
-    const audio = new Audio(base64Audio);
-
-    // Add error handling
-    audio.onerror = (error) => {
-      console.error("Audio playback error:", error);
-    };
-
-    // Play the audio
-    audio.play().catch((error) => {
-      console.error("Audio playback failed:", error);
-      // Handle autoplay restrictions
-      if (error.name === "NotAllowedError") {
-        console.log(
-          "Please interact with the page first to enable audio playback",
-        );
-      }
-    });
-  };
+  // const playAudio = (base64Audio: string) => {
+  //   // Create a new Audio object with the data URL
+  //   const audio = new Audio(base64Audio);
+  //
+  //   // Add error handling
+  //   audio.onerror = (error) => {
+  //     console.error("Audio playback error:", error);
+  //   };
+  //
+  //   // Play the audio
+  //   audio.play().catch((error) => {
+  //     console.error("Audio playback failed:", error);
+  //     // Handle autoplay restrictions
+  //     if (error.name === "NotAllowedError") {
+  //       console.log(
+  //         "Please interact with the page first to enable audio playback",
+  //       );
+  //     }
+  //   });
+  // };
 
   const cardStyle = {
     bgcolor: "rgba(255, 255, 255, 0.95)",
@@ -498,7 +490,9 @@ export default function Article() {
                   AI Perspective
                 </Typography>
                 <TextToSpeech text={perspective} />
-                <MarkdownRenderer content={perspective} />
+                <Typography variant="body1" component="div" gutterBottom>
+                  <MarkdownRenderer content={perspective} />
+                </Typography>
               </CardContent>
             </Card>
           </Stack>

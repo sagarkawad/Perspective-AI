@@ -223,7 +223,6 @@ async def chat(request: ChatRequest):
         request.thread_id,
         request.machine_id,
         request.user_id,
-        request.vm,
     )
 
 
@@ -240,3 +239,63 @@ async def get_chat_history(request: ChatHistoryRequest):
         request.machine_id,
         request.user_id,
     )
+
+
+
+class HistorySaveRequest(BaseModel):
+    type: str
+    url: Optional[str] = None
+    name: Optional[str] = None
+    machine_id: Optional[str] = None
+    user_id: Optional[str] = None
+
+
+class HistoryRequest(BaseModel):
+    machine_id: Optional[str] = None
+    user_id: Optional[str] = None
+
+
+@router.post("/history/save")
+async def save_history(request: HistorySaveRequest):
+    from app.db.models import HistoryEntry, User
+
+    user_obj = None
+    if request.user_id:
+        user_obj, _ = await User.get_or_create(clerk_user_id=request.user_id)
+
+    entry = HistoryEntry(
+        type=request.type,
+        url=request.url,
+        name=request.name,
+        machine_id=request.machine_id,
+        user=user_obj,
+    )
+    await entry.save()
+    return {"status": "ok"}
+
+
+@router.post("/history")
+async def load_history(request: HistoryRequest):
+    from fastapi import HTTPException
+    from app.db.models import HistoryEntry
+
+    if not request.user_id and not request.machine_id:
+        raise HTTPException(
+            status_code=400,
+            detail="machine_id or user_id required to fetch history"
+        )
+    qs = HistoryEntry.all()
+    if request.user_id:
+        qs = qs.filter(user__clerk_user_id=request.user_id)
+    else:
+        qs = qs.filter(machine_id=request.machine_id)
+    entries = await qs.order_by("-created_at").all()
+    return [
+        {
+            "type": e.type,
+            "url": e.url,
+            "name": e.name,
+            "created_at": e.created_at.isoformat(),
+        }
+        for e in entries
+    ]

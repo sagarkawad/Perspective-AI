@@ -15,6 +15,10 @@ function removeLatex(text: string): string {
 
 function MarkdownRenderer({ content }: { content: string }) {
   const sanitizedContent = removeLatex(content);
+  // Ensure numbered or bullet points appear on their own lines
+  const formattedContent = sanitizedContent
+    .replace(/(^|\s)(\d+\.\s+)/g, '$1\n$2')
+    .replace(/(^|\s)([•\-]\s+)/g, '$1\n$2');
   return (
     <div className="markdown-content">
       <ReactMarkdown
@@ -92,7 +96,7 @@ function MarkdownRenderer({ content }: { content: string }) {
           ),
         }}
       >
-        {sanitizedContent}
+        {formattedContent}
       </ReactMarkdown>
     </div>
   );
