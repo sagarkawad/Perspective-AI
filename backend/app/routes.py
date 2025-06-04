@@ -18,6 +18,7 @@ from app.utils.machine_id import get_machine_id
 from PyPDF2 import PdfReader
 from typing import BinaryIO
 import fitz
+from app.services.use_credits import UserCreditManager
 
 router = APIRouter()
 logger = logging.getLogger("uvicorn.error")
@@ -82,6 +83,24 @@ class ArticleSessionRequest(BaseModel):
     user_id: Optional[str] = None
 
 
+class CreditRequest(BaseModel):
+    user_id: str
+
+
+@router.post("/credits")
+async def get_credits(request: CreditRequest):
+    """Get user credits"""
+    if not request.user_id:
+        raise HTTPException(
+            status_code=400,
+            detail="User ID is required"
+        )
+
+    credit_manager = UserCreditManager(request.user_id)
+    credits = await credit_manager.get_credits()
+    return {"credits": credits}
+
+
 @router.post("/session")
 async def get_article_session(request: ArticleSessionRequest):
     """Retrieve existing summary and perspective for a URL if previously processed, ignoring machine_id and user_id"""
@@ -115,14 +134,10 @@ def generate_ai_perspective(request: ArticleRequest):
             status_code=500, detail="Error generating perspective")
 
 
-# @router.post("/summarize")
-# async def summarize_article(pdf )
-#     try:
-
-
 @router.post("/scrape-and-summarize")
 async def scrape_article(url: str = Form(None),
-                         file: UploadFile = File(None)):
+                         file: UploadFile = File(None),
+                         user_id: Optional[str] = Form(None)):
     print("Received request for scrape-and-summarize")
     print(f"URL: {url}")
     print(f"File: {file}")
@@ -150,6 +165,11 @@ async def scrape_article(url: str = Form(None),
             logger.error("No data returned from scraping")
             raise HTTPException(
                 status_code=500, detail="Error scraping the article. No data returned.")
+
+        # Reduce credits for article search if user is logged in and scraping was successful
+        if user_id:
+            credit_manager = UserCreditManager(user_id)
+            await credit_manager.reduce_credit('search')
 
         logger.info("Scraped data: %s", data)
 
@@ -239,7 +259,6 @@ async def get_chat_history(request: ChatHistoryRequest):
         request.machine_id,
         request.user_id,
     )
-
 
 
 class HistorySaveRequest(BaseModel):

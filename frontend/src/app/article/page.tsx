@@ -25,6 +25,7 @@ import { useStore } from "@/zustand/states";
 import { useUser } from "@clerk/nextjs";
 import CloseIcon from "@mui/icons-material/Close";
 import ChatIcon from "@mui/icons-material/Chat";
+import { useCredits } from "../hooks/useCredits";
 
 export default function Article() {
   const [videoId, setVideoId] = useState(""); // Default video
@@ -44,6 +45,7 @@ export default function Article() {
   const { file } = useStore();
   const { user } = useUser();
   const [isChatOpen, setIsChatOpen] = useState(true);
+  const { refreshCredits } = useCredits();
 
   const searchParams = useSearchParams();
   const articleUrl = searchParams.get("url");
@@ -123,6 +125,9 @@ export default function Article() {
           // For articles and videos, send URL as form data
           const formData = new FormData();
           formData.append("url", articleUrl);
+          if (user) {
+            formData.append("user_id", user.id);
+          }
           response = await fetch(
             contentType === "article"
               ? "http://localhost:8000/scrape-and-summarize"
@@ -219,6 +224,10 @@ export default function Article() {
           }
         };
         await generatePerspective();
+        // Refresh credits after successful operation
+        if (user) {
+          await refreshCredits();
+        }
       } catch (error) {
         console.error("Error fetching article analysis:", error);
       } finally {
@@ -226,7 +235,7 @@ export default function Article() {
       }
     };
     fetchData();
-  }, [sessionChecked, sessionExists, contentType, articleUrl, file]);
+  }, [sessionChecked, sessionExists, contentType, articleUrl, file, user]);
 
   useEffect(() => {
     if (!summary || !perspective || !articleUrl || !user) return;
@@ -298,7 +307,6 @@ export default function Article() {
           thread_id: threadId,
           machine_id: getOrCreateMachineId(),
           user_id: user?.id,
-          vm: false,
         }),
       });
 
@@ -314,8 +322,12 @@ export default function Article() {
         ...prev,
         { isAI: true, message: data.response },
       ]);
+      // Refresh credits after successful chat message
+      if (user) {
+        await refreshCredits();
+      }
     } catch (error) {
-      console.error("Error in chat:", error);
+      console.error("Error sending message:", error);
       setChatHistory((prev) => [
         ...prev,
         {

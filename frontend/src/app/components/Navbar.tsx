@@ -14,6 +14,7 @@ import {
   ListItem,
   ListItemText,
   ListItemIcon,
+  Chip,
 } from "@mui/material";
 import { Brain, Menu, Home, Github } from "lucide-react";
 import HistoryIcon from "@mui/icons-material/History";
@@ -23,15 +24,19 @@ import {
   SignedIn,
   SignedOut,
   UserButton,
+  useUser,
 } from "@clerk/nextjs";
 import { useState } from "react";
 import HistorySidebar from "./HistorySidebar";
+import { useCredits } from "../hooks/useCredits";
 
 const Navbar = () => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
   const [mobileOpen, setMobileOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
+  const { user } = useUser();
+  const { credits } = useCredits();
 
   const handleDrawerToggle = () => {
     setMobileOpen(!mobileOpen);
@@ -68,7 +73,6 @@ const Navbar = () => {
           </ListItem>
         ))}
         <ListItem
-          // button
           onClick={() => {
             handleDrawerToggle();
             setHistoryOpen(true);
@@ -83,7 +87,7 @@ const Navbar = () => {
           }}
         >
           <ListItemIcon sx={{ color: "#4a5568" }}>
-            <HistoryIcon size={20} />
+            <HistoryIcon />
           </ListItemIcon>
           <ListItemText primary="History" />
         </ListItem>
@@ -251,6 +255,19 @@ const Navbar = () => {
                 <SignUpButton mode="modal" />
               </SignedOut>
               <SignedIn>
+                {credits !== null && (
+                  <Chip
+                    label={`${credits} Credits`}
+                    sx={{
+                      bgcolor: "#3b82f6",
+                      color: "white",
+                      fontWeight: "500",
+                      "&:hover": {
+                        bgcolor: "#2563eb",
+                      },
+                    }}
+                  />
+                )}
                 <UserButton />
               </SignedIn>
             </Box>

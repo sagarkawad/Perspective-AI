@@ -1,36 +1,35 @@
 from datetime import datetime, timedelta
 import uuid
-from app.services.chat_service import create_chat_service
+from app.services.chat_service import create_chat_service, ChatService
 from typing import Dict, Tuple, Optional
 from fastapi import HTTPException, Depends
 from app.db.models import ChatSession, ChatMessage
 from app.services.voice_service import openai_voice
 from tortoise.transactions import in_transaction
 from tortoise import fields
+from app.services.use_credits import UserCreditManager
 
 
 class ChatManager:
     def __init__(self):
-        self.chat_services: Dict[str, Tuple[any, datetime]] = {}
-        self.MAX_INACTIVE_TIME = timedelta(hours=24)
-        self.MAX_SESSIONS = 1000
+        self.chat_services: Dict[str, Tuple[ChatService, datetime]] = {}
+        self.cleanup_threshold = timedelta(hours=1)
 
-    def _get_session_key(
-        self, url: str, machine_id: Optional[str] = None, user_id: Optional[str] = None
-    ) -> str:
-        """Compute the key for chat_services based on the URL and machine_id or user_id."""
-        identifier = user_id or machine_id
-        return f"{url}:{identifier}"
+    def _get_session_key(self, url: str, machine_id: Optional[str], user_id: Optional[str]) -> str:
+        """Generate a unique session key based on URL and user/machine ID"""
+        if user_id:
+            return f"{url}:user:{user_id}"
+        return f"{url}:machine:{machine_id}"
 
     def cleanup_old_sessions(self):
-        """Remove chat sessions that haven't been accessed recently"""
+        """Remove old chat services that haven't been used in a while"""
         current_time = datetime.now()
-        urls_to_remove = [
-            url for url, (_, last_accessed) in self.chat_services.items()
-            if current_time - last_accessed > self.MAX_INACTIVE_TIME
+        keys_to_remove = [
+            key for key, (_, last_used) in self.chat_services.items()
+            if current_time - last_used > self.cleanup_threshold
         ]
-        for url in urls_to_remove:
-            del self.chat_services[url]
+        for key in keys_to_remove:
+            del self.chat_services[key]
 
     async def initialize_chat(
         self,
@@ -43,65 +42,46 @@ class ChatManager:
         """Initialize a new chat session"""
         self.cleanup_old_sessions()
 
-        # Create database session
+        session_key = self._get_session_key(url, machine_id, user_id)
+        if session_key in self.chat_services:
+            return {"status": "Session already exists"}
+
+        # Create new chat service
+        chat_service = ChatService(summary, perspective)
+        self.chat_services[session_key] = (chat_service, datetime.now())
+
+        # Create or update session in database
         async with in_transaction() as connection:
             try:
-                # Associate or create user if provided
-                user = None
                 if user_id:
-                    from app.db.models import User
-
-                    user_obj, _ = await User.get_or_create(
-                        clerk_user_id=user_id, using_db=connection
+                    session, created = await ChatSession.get_or_create(
+                        url=url,
+                        user__clerk_user_id=user_id,
+                        defaults={
+                            "summary": summary,
+                            "perspective": perspective,
+                            "machine_id": None
+                        },
+                        using_db=connection
                     )
-                    user = user_obj
-
-                existing_session = None
-                if user:
-                    existing_session = await ChatSession.filter(
-                        user=user,
-                        url=url,
-                    ).using_db(connection).first()
-                    if not existing_session and machine_id:
-                        existing_session = await ChatSession.filter(
-                            machine_id=machine_id,
-                            url=url,
-                        ).using_db(connection).first()
-                    if existing_session:
-                        existing_session.user = user
-                        existing_session.machine_id = None
                 else:
-                    existing_session = await ChatSession.filter(
-                        machine_id=machine_id,
+                    session, created = await ChatSession.get_or_create(
                         url=url,
-                    ).using_db(connection).first()
-
-                if existing_session:
-                    existing_session.last_accessed = datetime.now()
-                    existing_session.summary = summary
-                    existing_session.perspective = perspective
-                    await existing_session.save(using_db=connection)
-                    session_id = existing_session.id
-                else:
-                    # Create new session only if doesn't exist
-                    new_session = ChatSession(
-                        url=url,
-                        summary=summary,
-                        perspective=perspective,
                         machine_id=machine_id,
-                        user=user,
+                        defaults={
+                            "summary": summary,
+                            "perspective": perspective,
+                            "user": None
+                        },
+                        using_db=connection
                     )
-                    await new_session.save(using_db=connection)
-                    session_id = new_session.id
 
-                session_key = self._get_session_key(url, machine_id, user_id)
-                if session_key not in self.chat_services:
-                    chat_service = create_chat_service(summary, perspective)
-                    self.chat_services[session_key] = (
-                        chat_service, datetime.now())
+                if not created:
+                    session.summary = summary
+                    session.perspective = perspective
+                    await session.save(using_db=connection)
 
-                return {"status": "existing" if existing_session else "initialized",
-                        "session_id": session_id}
+                return {"status": "Session initialized"}
 
             except Exception as e:
                 await connection.rollback()
@@ -147,6 +127,11 @@ class ChatManager:
                 if thread_id is None:
                     thread_id = str(uuid.uuid4())
 
+                # Reduce credits for user messages
+                if user_id:
+                    credit_manager = UserCreditManager(user_id)
+                    await credit_manager.reduce_credit('message')
+
                 # Store user message
                 user_message = ChatMessage(
                     session_id=session.id,
@@ -175,7 +160,6 @@ class ChatManager:
                 await ai_message.save(using_db=connection)
 
                 return {"response": response.content, "thread_id": thread_id}
-                # return {"response": response.content, "thread_id": thread_id}
 
             except Exception as e:
                 raise e
