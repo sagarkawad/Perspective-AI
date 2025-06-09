@@ -25,7 +25,7 @@ import { useStore } from "@/zustand/states";
 import { useUser } from "@clerk/nextjs";
 import CloseIcon from "@mui/icons-material/Close";
 import ChatIcon from "@mui/icons-material/Chat";
-import { useCredits } from "../hooks/useCredits";
+import { creditsFromDB } from "../hooks/useCredits";
 
 export default function Article() {
   const [videoId, setVideoId] = useState(""); // Default video
@@ -45,8 +45,7 @@ export default function Article() {
   const { file } = useStore();
   const { user } = useUser();
   const [isChatOpen, setIsChatOpen] = useState(true);
-  const { refreshCredits } = useCredits();
-
+  const { refreshCredits } = creditsFromDB();
   const searchParams = useSearchParams();
   const articleUrl = searchParams.get("url");
   const contentType = searchParams.get("type");
@@ -60,7 +59,165 @@ export default function Article() {
 
   // Add new state for thread ID
   const [threadId, setThreadId] = useState<string | null>(null);
+  // functions
 
+  const generatePerspective = async (summaryVar: string) => {
+    try {
+      setPerspective("");
+      console.log("Generating perspective for summary:", summaryVar);
+      const resPerspective = await fetch(
+        "http://localhost:8000/generate-perspective",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ summary: summaryVar }),
+        },
+      );
+
+      if (!resPerspective.ok) {
+        throw new Error(`HTTP error! status: ${resPerspective.status}`);
+      }
+
+      const reader2 = resPerspective.body?.getReader();
+      if (!reader2) {
+        throw new Error("No reader available");
+      }
+
+      const decoder2 = new TextDecoder();
+      let buf2 = "";
+
+      while (true) {
+        const { done: done2, value: value2 } = await reader2.read();
+        if (done2) break;
+
+        buf2 += decoder2.decode(value2, { stream: true });
+        const lines2 = buf2.split("\n");
+        buf2 = lines2.pop() || "";
+
+        for (const line2 of lines2) {
+          if (line2.trim()) {
+            setPerspective((prev) => prev + line2);
+          }
+        }
+      }
+    } catch (err) {
+      console.error("Error generating perspective:", err);
+    } finally {
+      setIsPerspectiveCompleted(true);
+    }
+  };
+  const processArticle = async () => {
+    if (!articleUrl) return;
+
+    try {
+      // First check if session exists
+      const sessionRes = await fetch("http://localhost:8000/session", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          url: articleUrl,
+          machine_id: getOrCreateMachineId(),
+          user_id: user?.id,
+        }),
+      });
+      const sessionData = await sessionRes.json();
+
+      if (sessionData.exists) {
+        // If session exists, use existing data
+        setSummary(sessionData.summary);
+        setPerspective(sessionData.perspective);
+        setSessionExists(true);
+        setIsSummaryCompleted(true);
+        setIsPerspectiveCompleted(true);
+        setSessionChecked(true);
+        return;
+      }
+
+      // If no session exists, proceed with fetching new data
+      setSessionChecked(true);
+      setSessionExists(false);
+
+      // Get article summary
+      let response;
+      if (contentType === "pdf") {
+        if (file) {
+          const formData = new FormData();
+          formData.append("file", file);
+
+          response = await fetch("http://localhost:8000/scrape-and-summarize", {
+            method: "POST",
+            body: formData,
+          });
+        }
+      } else {
+        // For articles and videos, send URL as form data
+        const formData = new FormData();
+        formData.append("url", articleUrl);
+        if (user) {
+          formData.append("user_id", user.id);
+        }
+        response = await fetch(
+          contentType === "article"
+            ? "http://localhost:8000/scrape-and-summarize"
+            : "http://localhost:8000/analyze-video",
+          {
+            method: "POST",
+            body: formData,
+          },
+        );
+      }
+      if (!response) {
+        console.error("No response received");
+        return;
+      }
+      if (!response.body) {
+        console.error("No response body");
+        return;
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder("utf-8");
+      let buffer = "";
+      let summaryVar = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || ""; // Keep the last incomplete line in the buffer
+
+        for (const line of lines) {
+          if (line.startsWith("data: ")) {
+            try {
+              const data = JSON.parse(line.slice(6));
+              if (data.error) {
+                console.error("Stream error:", data.error);
+                continue;
+              }
+              if (data.chunk) {
+                setSummary((prev) => prev + data.chunk);
+                summaryVar = summaryVar + data.chunk;
+              }
+            } catch (e) {
+              console.error("Error parsing stream data:", e);
+            }
+          }
+        }
+      }
+      await generatePerspective(summaryVar);
+      // Refresh credits after successful operation
+      if (user) {
+        await refreshCredits();
+      }
+    } catch (error) {
+      console.error("Error processing article:", error);
+    } finally {
+      setIsSummaryCompleted(true);
+      setIsPerspectiveCompleted(true);
+    }
+  };
   // Set URL and type when component mounts
   useEffect(() => {
     if (articleUrl) {
@@ -72,187 +229,35 @@ export default function Article() {
   }, [articleUrl, contentType]);
 
   useEffect(() => {
-    if (!articleUrl) return;
-
-    const processArticle = async () => {
-      try {
-        // First check if session exists
-        const sessionRes = await fetch("http://localhost:8000/session", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            url: articleUrl,
-            machine_id: getOrCreateMachineId(),
-            user_id: user?.id,
-          }),
-        });
-        const sessionData = await sessionRes.json();
-        
-        if (sessionData.exists) {
-          // If session exists, use existing data
-          setSummary(sessionData.summary);
-          setPerspective(sessionData.perspective);
-          setSessionExists(true);
-          setIsSummaryCompleted(true);
-          setIsPerspectiveCompleted(true);
-          setSessionChecked(true);
-          return;
-        }
-
-        // If no session exists, proceed with fetching new data
-        setSessionChecked(true);
-        setSessionExists(false);
-
-        // Get article summary
-        let response;
-        if (contentType === "pdf") {
-          if (file) {
-            const formData = new FormData();
-            formData.append("file", file);
-
-            response = await fetch("http://localhost:8000/scrape-and-summarize", {
-              method: "POST",
-              body: formData,
-            });
-          }
-        } else {
-          // For articles and videos, send URL as form data
-          const formData = new FormData();
-          formData.append("url", articleUrl);
-          if (user) {
-            formData.append("user_id", user.id);
-          }
-          response = await fetch(
-            contentType === "article"
-              ? "http://localhost:8000/scrape-and-summarize"
-              : "http://localhost:8000/analyze-video",
-            {
-              method: "POST",
-              body: formData,
-            }
-          );
-        }
-        if (!response) {
-          console.error("No response received");
-          return;
-        }
-        if (!response.body) {
-          console.error("No response body");
-          return;
-        }
-
-        const reader = response.body.getReader();
-        const decoder = new TextDecoder("utf-8");
-        let buffer = "";
-        let summaryVar = "";
-
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-
-          buffer += decoder.decode(value, { stream: true });
-          const lines = buffer.split("\n");
-          buffer = lines.pop() || ""; // Keep the last incomplete line in the buffer
-
-          for (const line of lines) {
-            if (line.startsWith("data: ")) {
-              try {
-                const data = JSON.parse(line.slice(6));
-                if (data.error) {
-                  console.error("Stream error:", data.error);
-                  continue;
-                }
-                if (data.chunk) {
-                  setSummary((prev) => prev + data.chunk);
-                  summaryVar = summaryVar + data.chunk;
-                }
-              } catch (e) {
-                console.error("Error parsing stream data:", e);
-              }
-            }
-          }
-        }
-        const generatePerspective = async () => {
-          try {
-            setPerspective("");
-            console.log("Generating perspective for summary:", summaryVar);
-            const resPerspective = await fetch(
-              "http://localhost:8000/generate-perspective",
-              {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ summary: summaryVar }),
-              },
-            );
-
-            if (!resPerspective.ok) {
-              throw new Error(`HTTP error! status: ${resPerspective.status}`);
-            }
-
-            const reader2 = resPerspective.body?.getReader();
-            if (!reader2) {
-              throw new Error("No reader available");
-            }
-
-            const decoder2 = new TextDecoder();
-            let buf2 = "";
-
-            while (true) {
-              const { done: done2, value: value2 } = await reader2.read();
-              if (done2) break;
-
-              buf2 += decoder2.decode(value2, { stream: true });
-              const lines2 = buf2.split("\n");
-              buf2 = lines2.pop() || "";
-
-              for (const line2 of lines2) {
-                if (line2.trim()) {
-                  setPerspective((prev) => prev + line2);
-                }
-              }
-            }
-          } catch (err) {
-            console.error("Error generating perspective:", err);
-          } finally {
-            setIsPerspectiveCompleted(true);
-          }
-        };
-        await generatePerspective();
-        // Refresh credits after successful operation
-        if (user) {
-          await refreshCredits();
-        }
-      } catch (error) {
-        console.error("Error processing article:", error);
-      } finally {
-        setIsSummaryCompleted(true);
-        setIsPerspectiveCompleted(true);
-      }
-    };
-
     processArticle();
   }, [articleUrl, contentType, file, user]);
 
   useEffect(() => {
-    if (!summaryCompleted || !perspectiveCompleted || !articleUrl || !user) return;
+    if (!summaryCompleted || !perspectiveCompleted || !articleUrl || !user)
+      return;
 
     const initializeChat = async () => {
       try {
         // Initialize chat session
-        const initResponse = await fetch(`http://localhost:8000/initialize-chat`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            url: articleUrl,
-            summary: summary,
-            perspective: perspective,
-            machine_id: getOrCreateMachineId(),
-            user_id: user.id,
-          }),
-        });
+        const initResponse = await fetch(
+          `http://localhost:8000/initialize-chat`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              url: articleUrl,
+              summary: summary,
+              perspective: perspective,
+              machine_id: getOrCreateMachineId(),
+              user_id: user.id,
+            }),
+          },
+        );
 
         if (!initResponse.ok) {
-          throw new Error(`Failed to initialize chat: ${initResponse.statusText}`);
+          throw new Error(
+            `Failed to initialize chat: ${initResponse.statusText}`,
+          );
         }
 
         const initData = await initResponse.json();
@@ -275,7 +280,9 @@ export default function Article() {
         );
 
         if (!historyResponse.ok) {
-          throw new Error(`Failed to fetch chat history: ${historyResponse.statusText}`);
+          throw new Error(
+            `Failed to fetch chat history: ${historyResponse.statusText}`,
+          );
         }
 
         const historyData = await historyResponse.json();
@@ -296,14 +303,22 @@ export default function Article() {
         setChatHistory([
           {
             isAI: true,
-            message: "Sorry, I encountered an error initializing the chat. Please try refreshing the page.",
+            message:
+              "Sorry, I encountered an error initializing the chat. Please try refreshing the page.",
           },
         ]);
       }
     };
 
     initializeChat();
-  }, [summaryCompleted, perspectiveCompleted, articleUrl, user, summary, perspective]);
+  }, [
+    summaryCompleted,
+    perspectiveCompleted,
+    articleUrl,
+    user,
+    summary,
+    perspective,
+  ]);
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();

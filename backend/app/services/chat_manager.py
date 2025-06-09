@@ -53,7 +53,7 @@ class ChatManager:
                     user, _ = await User.get_or_create(
                         clerk_user_id=user_id,
                         # Set default values for new users
-                        defaults={"credit": 100}
+                        # defaults={"credit": 100}
                     )
                     session, created = await ChatSession.get_or_create(
                         url=url,

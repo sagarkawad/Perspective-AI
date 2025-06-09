@@ -1,10 +1,10 @@
-import { useState, useEffect } from 'react';
-import { useUser } from '@clerk/nextjs';
+import { useState, useEffect } from "react";
+import { useUser } from "@clerk/nextjs";
+import { useCredits } from "@/zustand/states";
 
-export const useCredits = () => {
+export const creditsFromDB = () => {
   const { user } = useUser();
-  const [credits, setCredits] = useState<number | null>(null);
-
+  const { credits, setCredits } = useCredits();
   const fetchCredits = async () => {
     if (user) {
       try {
@@ -30,4 +30,4 @@ export const useCredits = () => {
   }, [user]);
 
   return { credits, refreshCredits: fetchCredits };
-}; 
+};

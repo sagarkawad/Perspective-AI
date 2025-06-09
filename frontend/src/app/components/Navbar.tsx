@@ -26,9 +26,9 @@ import {
   UserButton,
   useUser,
 } from "@clerk/nextjs";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import HistorySidebar from "./HistorySidebar";
-import { useCredits } from "../hooks/useCredits";
+import { creditsFromDB } from "../hooks/useCredits";
 
 const Navbar = () => {
   const theme = useTheme();
@@ -36,7 +36,7 @@ const Navbar = () => {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const { user } = useUser();
-  const { credits } = useCredits();
+  const { credits, refreshCredits } = creditsFromDB();
 
   const handleDrawerToggle = () => {
     setMobileOpen(!mobileOpen);
@@ -50,7 +50,6 @@ const Navbar = () => {
       icon: <Github size={20} />,
     },
   ];
-
   const drawer = (
     <Box onClick={handleDrawerToggle} sx={{ textAlign: "center" }}>
       <List>

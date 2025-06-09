@@ -117,6 +117,7 @@ async def get_article_session(request: ArticleSessionRequest):
 @router.post("/generate-perspective")
 def generate_ai_perspective(request: ArticleRequest):
     try:
+
         async def generate_perspective_chunks():
             for chunk in generate_opposite_perspective(request.summary):
                 if chunk:  # Only yield non-empty chunks
@@ -142,6 +143,11 @@ async def scrape_article(url: str = Form(None),
     print(f"File: {file}")
 
     try:
+        # Reduce credits for article search if user is logged in and scraping was successful
+        if user_id:
+            credit_manager = UserCreditManager(user_id)
+            await credit_manager.reduce_credit('search')
+
         data = None
         if url:
             print("DEBUG: Processing URL")
@@ -164,11 +170,6 @@ async def scrape_article(url: str = Form(None),
             logger.error("No data returned from scraping")
             raise HTTPException(
                 status_code=500, detail="Error scraping the article. No data returned.")
-
-        # Reduce credits for article search if user is logged in and scraping was successful
-        if user_id:
-            credit_manager = UserCreditManager(user_id)
-            await credit_manager.reduce_credit('search')
 
         logger.info("Scraped data: %s", data)
 
