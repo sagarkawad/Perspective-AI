@@ -305,7 +305,7 @@ async def load_history(request: HistoryRequest):
         )
     qs = HistoryEntry.all()
     if request.user_id:
-        qs = qs.filter(user__clerk_user_id=request.user_id)
+        qs = qs.filter(user_id=request.user_id)
     else:
         qs = qs.filter(machine_id=request.machine_id)
     entries = await qs.order_by("-created_at").all()
