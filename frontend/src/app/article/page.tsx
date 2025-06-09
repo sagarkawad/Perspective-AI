@@ -73,9 +73,11 @@ export default function Article() {
 
   useEffect(() => {
     if (!articleUrl) return;
-    const fetchSessionData = async () => {
+
+    const processArticle = async () => {
       try {
-        const res = await fetch("http://localhost:8000/session", {
+        // First check if session exists
+        const sessionRes = await fetch("http://localhost:8000/session", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -84,28 +86,23 @@ export default function Article() {
             user_id: user?.id,
           }),
         });
-        const data = await res.json();
-        if (data.exists) {
-          setSummary(data.summary);
-          setPerspective(data.perspective);
+        const sessionData = await sessionRes.json();
+        
+        if (sessionData.exists) {
+          // If session exists, use existing data
+          setSummary(sessionData.summary);
+          setPerspective(sessionData.perspective);
           setSessionExists(true);
           setIsSummaryCompleted(true);
           setIsPerspectiveCompleted(true);
+          setSessionChecked(true);
+          return;
         }
-      } catch (error) {
-        console.error("Error fetching session data:", error);
-      } finally {
+
+        // If no session exists, proceed with fetching new data
         setSessionChecked(true);
-      }
-    };
-    fetchSessionData();
-  }, [articleUrl, user]);
+        setSessionExists(false);
 
-  useEffect(() => {
-    if (!sessionChecked || sessionExists || !articleUrl) return;
-
-    const fetchData = async () => {
-      try {
         // Get article summary
         let response;
         if (contentType === "pdf") {
@@ -113,13 +110,10 @@ export default function Article() {
             const formData = new FormData();
             formData.append("file", file);
 
-            response = await fetch(
-              "http://localhost:8000/scrape-and-summarize",
-              {
-                method: "POST",
-                body: formData,
-              },
-            );
+            response = await fetch("http://localhost:8000/scrape-and-summarize", {
+              method: "POST",
+              body: formData,
+            });
           }
         } else {
           // For articles and videos, send URL as form data
@@ -135,7 +129,7 @@ export default function Article() {
             {
               method: "POST",
               body: formData,
-            },
+            }
           );
         }
         if (!response) {
@@ -229,20 +223,23 @@ export default function Article() {
           await refreshCredits();
         }
       } catch (error) {
-        console.error("Error fetching article analysis:", error);
+        console.error("Error processing article:", error);
       } finally {
         setIsSummaryCompleted(true);
+        setIsPerspectiveCompleted(true);
       }
     };
-    fetchData();
-  }, [sessionChecked, sessionExists, contentType, articleUrl, file, user]);
+
+    processArticle();
+  }, [articleUrl, contentType, file, user]);
 
   useEffect(() => {
-    if (!summary || !perspective || !articleUrl || !user) return;
+    if (!summaryCompleted || !perspectiveCompleted || !articleUrl || !user) return;
 
     const initializeChat = async () => {
       try {
-        await fetch(`http://localhost:8000/initialize-chat`, {
+        // Initialize chat session
+        const initResponse = await fetch(`http://localhost:8000/initialize-chat`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -254,6 +251,16 @@ export default function Article() {
           }),
         });
 
+        if (!initResponse.ok) {
+          throw new Error(`Failed to initialize chat: ${initResponse.statusText}`);
+        }
+
+        const initData = await initResponse.json();
+        if (initData.status !== "Session initialized") {
+          throw new Error("Chat session initialization failed");
+        }
+
+        // Fetch existing chat history
         const historyResponse = await fetch(
           `http://localhost:8000/chat-history`,
           {
@@ -266,6 +273,11 @@ export default function Article() {
             }),
           },
         );
+
+        if (!historyResponse.ok) {
+          throw new Error(`Failed to fetch chat history: ${historyResponse.statusText}`);
+        }
+
         const historyData = await historyResponse.json();
 
         const greetingMessage = {
@@ -281,11 +293,17 @@ export default function Article() {
         setIsChatInitialized(true);
       } catch (error) {
         console.error("Error initializing chat:", error);
+        setChatHistory([
+          {
+            isAI: true,
+            message: "Sorry, I encountered an error initializing the chat. Please try refreshing the page.",
+          },
+        ]);
       }
     };
 
     initializeChat();
-  }, [summaryCompleted, perspectiveCompleted, articleUrl, user]);
+  }, [summaryCompleted, perspectiveCompleted, articleUrl, user, summary, perspective]);
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();

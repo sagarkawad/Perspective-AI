@@ -3,7 +3,7 @@ import uuid
 from app.services.chat_service import create_chat_service, ChatService
 from typing import Dict, Tuple, Optional
 from fastapi import HTTPException, Depends
-from app.db.models import ChatSession, ChatMessage
+from app.db.models import ChatSession, ChatMessage, User
 from app.services.voice_service import openai_voice
 from tortoise.transactions import in_transaction
 from tortoise import fields
@@ -43,20 +43,21 @@ class ChatManager:
         self.cleanup_old_sessions()
 
         session_key = self._get_session_key(url, machine_id, user_id)
-        if session_key in self.chat_services:
-            return {"status": "Session already exists"}
 
-        # Create new chat service
-        chat_service = ChatService(summary, perspective)
-        self.chat_services[session_key] = (chat_service, datetime.now())
-
-        # Create or update session in database
+        # Create or update session in database first
         async with in_transaction() as connection:
             try:
                 if user_id:
+
+                    # First ensure the user exists
+                    user, _ = await User.get_or_create(
+                        clerk_user_id=user_id,
+                        # Set default values for new users
+                        defaults={"credit": 100}
+                    )
                     session, created = await ChatSession.get_or_create(
                         url=url,
-                        user__clerk_user_id=user_id,
+                        user=user,
                         defaults={
                             "summary": summary,
                             "perspective": perspective,
@@ -81,7 +82,12 @@ class ChatManager:
                     session.perspective = perspective
                     await session.save(using_db=connection)
 
-                return {"status": "Session initialized"}
+                # Create new chat service and store in memory
+                chat_service = ChatService(summary, perspective)
+                self.chat_services[session_key] = (
+                    chat_service, datetime.now())
+
+                return {"status": "Session initialized", "session_id": session.id}
 
             except Exception as e:
                 await connection.rollback()
@@ -94,15 +100,11 @@ class ChatManager:
         thread_id: Optional[str] = None,
         machine_id: Optional[str] = None,
         user_id: Optional[str] = None,
-        vm: bool = True,
     ) -> dict:
         """Get response for a chat message"""
         self.cleanup_old_sessions()
 
         session_key = self._get_session_key(url, machine_id, user_id)
-        if session_key not in self.chat_services:
-            raise HTTPException(
-                status_code=404, detail="Chat session not found")
 
         async with in_transaction() as connection:
             try:
@@ -110,17 +112,26 @@ class ChatManager:
                 if user_id:
                     session = await ChatSession.filter(
                         url=url,
-                        user__clerk_user_id=user_id,
+                        user_id=user_id,
                     ).using_db(connection).first()
                 else:
                     session = await ChatSession.filter(
                         url=url,
                         machine_id=machine_id,
                     ).using_db(connection).first()
+
                 if not session:
                     raise HTTPException(
                         status_code=404, detail="Chat session not found"
                     )
+
+                # If session exists in database but not in memory, reinitialize it
+                if session_key not in self.chat_services:
+                    chat_service = ChatService(
+                        session.summary, session.perspective)
+                    self.chat_services[session_key] = (
+                        chat_service, datetime.now())
+
                 session.last_accessed = datetime.utcnow()
                 await session.save(using_db=connection)
 

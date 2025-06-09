@@ -68,7 +68,6 @@ class ChatRequest(BaseModel):
     thread_id: Optional[str] = None
     machine_id: Optional[str] = None
     user_id: Optional[str] = None
-    vm: bool
 
 
 class ChatHistoryRequest(BaseModel):

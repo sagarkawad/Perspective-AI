@@ -18,7 +18,7 @@ class ChatSession(Model):
 
     id = fields.IntField(primary_key=True, index=True)
     user = fields.ForeignKeyField(
-        "models.User", related_name="sessions", null=True)
+        "models.User", related_name="sessions", null=True, to_field="clerk_user_id")
     machine_id = fields.CharField(index=True, max_length=255, null=True)
     url = fields.CharField(max_length=255)
     summary = fields.TextField()
@@ -46,7 +46,8 @@ class HistoryEntry(Model):
     __tablename__ = "history_entries"
 
     id = fields.IntField(pk=True)
-    user = fields.ForeignKeyField("models.User", related_name="history_entries", null=True)
+    user = fields.ForeignKeyField(
+        "models.User", related_name="history_entries", null=True)
     machine_id = fields.CharField(max_length=255, null=True, index=True)
     type = fields.CharField(max_length=20)
     url = fields.CharField(max_length=255, null=True)
