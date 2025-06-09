@@ -11,6 +11,7 @@ class User(Model):
     created_at = fields.DatetimeField(auto_now_add=True)
 
     sessions: fields.ReverseRelation["ChatSession"]
+    history_entries: fields.ReverseRelation["HistoryEntry"]
 
 
 class ChatSession(Model):
@@ -47,7 +48,7 @@ class HistoryEntry(Model):
 
     id = fields.IntField(pk=True)
     user = fields.ForeignKeyField(
-        "models.User", related_name="history_entries", null=True)
+        "models.User", related_name="history_entries", null=True, to_field="clerk_user_id")
     machine_id = fields.CharField(max_length=255, null=True, index=True)
     type = fields.CharField(max_length=20)
     url = fields.CharField(max_length=255, null=True)

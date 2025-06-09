@@ -7,6 +7,7 @@ from app.db.models import ChatSession, ChatMessage, User
 from app.services.voice_service import openai_voice
 from tortoise.transactions import in_transaction
 from tortoise import fields
+from tortoise.exceptions import IntegrityError
 from app.services.use_credits import UserCreditManager
 
 
@@ -55,27 +56,39 @@ class ChatManager:
                         # Set default values for new users
                         # defaults={"credit": 100}
                     )
-                    session, created = await ChatSession.get_or_create(
-                        url=url,
-                        user=user,
-                        defaults={
-                            "summary": summary,
-                            "perspective": perspective,
-                            "machine_id": None
-                        },
-                        using_db=connection
-                    )
+                    try:
+                        session, created = await ChatSession.get_or_create(
+                            url=url,
+                            user=user,
+                            defaults={
+                                "summary": summary,
+                                "perspective": perspective,
+                                "machine_id": None,
+                            },
+                            using_db=connection,
+                        )
+                    except IntegrityError:
+                        session = await ChatSession.get(
+                            url=url, user=user
+                        ).using_db(connection)
+                        created = False
                 else:
-                    session, created = await ChatSession.get_or_create(
-                        url=url,
-                        machine_id=machine_id,
-                        defaults={
-                            "summary": summary,
-                            "perspective": perspective,
-                            "user": None
-                        },
-                        using_db=connection
-                    )
+                    try:
+                        session, created = await ChatSession.get_or_create(
+                            url=url,
+                            machine_id=machine_id,
+                            defaults={
+                                "summary": summary,
+                                "perspective": perspective,
+                                "user": None,
+                            },
+                            using_db=connection,
+                        )
+                    except IntegrityError:
+                        session = await ChatSession.get(
+                            url=url, machine_id=machine_id
+                        ).using_db(connection)
+                        created = False
 
                 if not created:
                     session.summary = summary
